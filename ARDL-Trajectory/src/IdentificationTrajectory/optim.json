@@ -1,0 +1,22 @@
+{
+    "optimizer": "cgaco",
+    "gaco": {
+        "generations": 6,
+        "kernel_size": 30,
+        "q": 2,
+        "oracle": 0.5,
+        "acc": 0.00001,
+        "thresh": 500,
+        "n_gen_mark": 10,
+        "impstop": 100000,
+        "evalstop": 10000000,
+        "focus": 0.1
+    },
+    "localoptimizer": {
+        "type": "compass",
+        "maxEvals": 100000,
+        "startRange": 1,
+        "stopRange": 0.2
+    },
+    "iters": 60
+}
