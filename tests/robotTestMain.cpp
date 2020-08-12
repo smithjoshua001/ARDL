@@ -1,6 +1,10 @@
 #pragma once
+
+#include <fstream>
+#include <string>
 #define CATCH_CONFIG_RUNNER
 #include "catch.hpp"
+#include "ARDL/Util/ModelPath.hpp"
 
 std::string urdfModel = "";
 
@@ -15,5 +19,6 @@ int main(int argc, char *argv[]) {
     if (returnCode != 0) {
         return returnCode;
     }
+    urdfModel= ARDL::Util::getModelFromGazeboPath(urdfModel);
     return session.run();
 }

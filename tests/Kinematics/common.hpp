@@ -1,22 +1,34 @@
 #pragma once
 
 #include <ARDL/Kinematics/ForwardKinematics.hpp>
+#include <ARDL/Dynamics/Dynamics.hpp>
 
 #include <kdl/kdl.hpp>
 #include <kdl_parser.hpp>
 #include <kdl/tree.hpp>
 #include <kdl/chaindynparam.hpp>
 #include <kdl/chainfksolvervel_recursive.hpp>
-#include <kdl/chainjnttojacsolver.hpp>
+//#include <kdl/chainjnttojacsolver.hpp>
 #include <kdl/chainfksolverpos_recursive.hpp>
 #include <kdl/chainjnttojacdotsolver.hpp>
 
 #include <rbdl/rbdl.h>
 #ifndef RBDL_BUILD_ADDON_URDFREADER
-#  error "Error: RBDL addon URDFReader not enabled."
+    #error "Error: RBDL addon URDFReader not enabled."
 #endif
 
 #include <rbdl/addons/urdfreader/urdfreader.h>
+
+#include <pinocchio/parsers/urdf.hpp>
+#include <pinocchio/multibody/model.hpp>
+#include <pinocchio/multibody/data.hpp>
+#include "pinocchio/spatial/explog.hpp"
+#include "pinocchio/algorithm/kinematics.hpp"
+#include "pinocchio/algorithm/jacobian.hpp"
+#include "pinocchio/algorithm/kinematics-derivatives.hpp"
+#include <pinocchio/algorithm/joint-configuration.hpp>
+#include <pinocchio/algorithm/compute-all-terms.hpp>
+#include <pinocchio/algorithm/rnea.hpp>
 
 using namespace ARDL;
 using namespace ARDL::Math;
@@ -41,6 +53,11 @@ void setupKDL(std::string filename, KDL::Chain &chain_KDL, std::shared_ptr<KDL::
     jtc = std::shared_ptr<KDL::ChainFkSolverPos_recursive>(new KDL::ChainFkSolverPos_recursive(chain_KDL));
     jtjd = std::shared_ptr<KDL::ChainJntToJacDotSolver>(new KDL::ChainJntToJacDotSolver(chain_KDL));
     jtj = std::shared_ptr<KDL::ChainJntToJacSolver>(new KDL::ChainJntToJacSolver(chain_KDL));
+}
+
+void setupPinocchio(std::string filename, pinocchio::Model &model, pinocchio::Data &data) {
+    pinocchio::urdf::buildModel(filename, model);
+    data = pinocchio::Data(model);
 }
 
 void setupARDL(std::string filename, std::shared_ptr<Chain<double> > &chain, std::shared_ptr<ForwardKinematics<double> > &fk) {

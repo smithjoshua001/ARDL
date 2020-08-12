@@ -1,229 +1,203 @@
 #pragma once
-
+// #define EIGEN_USE_BLAS ON
+#define EIGEN_RUNTIME_NO_MALLOC ON
+// #define ARDL_NO_VARIANT ON
 #include "robotTestMain.cpp"
 #include "Kinematics/common.hpp"
 #include "ARDL/Util/Logger.hpp"
-#include <chrono>
+#include "ARDL/Util/Timer.hpp"
+#include "ARDL/Util/MatrixInitializer.hpp"
+#include "pinocchio/algorithm/frames.hpp"
 
 using namespace ARDL::Util;
 
-// TEST_CASE("Jacobian Checking", "[adjoint][kinematics]") {
-//     std::shared_ptr<KDL::ChainFkSolverPos_recursive> jnt_to_cart;
-//     std::shared_ptr<KDL::ChainJntToJacDotSolver> jnt_to_jacdot;
-//     std::shared_ptr<KDL::ChainJntToJacSolver> jnt_to_jac;
+TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
+    std::shared_ptr<Chain<double>> c;
+    std::shared_ptr<ForwardKinematics<double>> fk;
 
-//     std::shared_ptr<Chain<double> > c;
-//     std::shared_ptr<ForwardKinematics<double> > fk;
+    pinocchio::Model pModel;
+    pinocchio::Data pData;
 
-//     setupARDL(urdfModel, c, fk);
-
-//     KDL::Chain chainKDL;
-//     setupKDL(urdfModel, chainKDL, jnt_to_cart, jnt_to_jacdot, jnt_to_jac, c->getRootName(), c->getTipName());
-
-//     std::shared_ptr<KDL::ChainFkSolverVel_recursive> jnt_to_vel = std::shared_ptr<KDL::ChainFkSolverVel_recursive>(new KDL::ChainFkSolverVel_recursive(chainKDL));
-
-//     #ifdef EIGEN_DONT_VECTORIZE
-//     RigidBodyDynamics::Model modelRBDL = setupRBDL(urdfModel);
-//     #endif
-//     Eigen::VectorXd q(c->getNumOfJoints());
-//     Eigen::VectorXd qd(c->getNumOfJoints()), qdd(c->getNumOfJoints());
-
-//     q.setZero();
-//     qd.setZero();
-//     qdd.setZero();
-
-//     Eigen::MatrixXd invAdj;
-//     invAdj.resize(6, 6);
-
-//     c->updateChain(q, qd);
-//     c->updateMatrices();
-
-//     aligned_vector<AdjointSE3<double> > adjoints;
-//     adjoints.resize(c->getNumOfJoints());
-//     fk->getAdjoints(adjoints);
-
-//     /******************KDL******************/
-//     KDL::JntArrayVel KDL_state(c->getNumOfJoints());
-//     KDL_state.q.data = q;
-//     KDL_state.qdot.data = qd;
-//     KDL::Frame cartPosFrame;
-//     jnt_to_cart->JntToCart(KDL_state.q, cartPosFrame, chainKDL.getNrOfSegments());
-//     KDL::Jacobian jac(c->getNumOfJoints());
-//     jnt_to_jac->JntToJac(KDL_state.q, jac, chainKDL.getNrOfSegments());
-//     KDL::Jacobian jacDot(c->getNumOfJoints());
-//     jnt_to_jacdot->setRepresentation(1);
-//     jnt_to_jacdot->JntToJacDot(KDL_state, jacDot, chainKDL.getNrOfSegments());
-
-//     /******************END KDL******************/
-
-//     aligned_vector<Jacobian<double> > jacobians, jacobianDots;
-//     jacobians.resize(c->getNumOfJoints());
-//     jacobianDots.resize(c->getNumOfJoints());
-//     for (int i = 0; i < c->getNumOfJoints(); i++) {
-//         jacobians.at(i).resize(6, c->getNumOfJoints());
-//         jacobians.at(i).setZero();
-//         jacobianDots.at(i).resize(6, c->getNumOfJoints());
-//         jacobianDots.at(i).setZero();
-//     }
-//     Jacobian<double> jacDL, jacDotDL;
-//     jacDL.resize(6, c->getNumOfJoints());
-//     jacDotDL.resize(6, c->getNumOfJoints());
-
-//     fk->getBodyJacobian(jacobians, jacobianDots);
-
-//     for (int i = 0; i < c->getNumOfJoints(); i++) {
-//         LOG_DEBUG_LEVEL5("DL JAC {}: \n {} \n\n", i, jacobians.at(i));
-//     }
-//     Eigen::Vector3d tmpP = adjoints.back().getPRef();
-//     adjoints.back().getPRef().setZero();
-
-//     fk->convertBodyToMixedJacobian(adjoints.back(), jacobians.back(), jacDL);
-//     LOG_DEBUG_LEVEL5("DL JAC: \n {} \n\n", jacDL);
-//     LOG_DEBUG_LEVEL5("KDL JAC: \n {} \n\n", jac.data);
-//     #ifdef EIGEN_DONT_VECTORIZE
-//     RigidBodyDynamics::UpdateKinematicsCustom(modelRBDL, &(q), NULL, NULL);
-//     #endif
-//     Eigen::Vector3d finalFixed;
-//     finalFixed.setZero();
-//     if (c->getLinks().back()->getParentJoint()->isFixed()) {
-//         finalFixed = c->getLinks().back()->getParentJoint()->getOriginTransform().getR() * c->getLinks().back()->getParentJoint()->getOriginTransform().getP();
-//     }
-//     #ifdef EIGEN_DONT_VECTORIZE
-//     Eigen::MatrixXd jacobianRBDL, jacobianRBDLFlipped;
-//     jacobianRBDL.resize(6, c->getNumOfJoints());
-//     jacobianRBDLFlipped.resize(6, c->getNumOfJoints());
-//     jacobianRBDL.setZero();
-
-//     RigidBodyDynamics::CalcBodySpatialJacobian(modelRBDL, q, c->getNumOfJoints(), jacobianRBDL, true);
-
-//     // RigidBodyDynamics::CalcPointJacobian6D(modelRBDL, q, c->getNumOfJoints(), finalFixed, jacobianRBDL, true);
-
-//     jacobianRBDLFlipped.block(0, 0, 3, c->getNumOfJoints()) = jacobianRBDL.block(3, 0, 3, c->getNumOfJoints());
-//     jacobianRBDLFlipped.block(3, 0, 3, c->getNumOfJoints()) = jacobianRBDL.block(0, 0, 3, c->getNumOfJoints());
-
-//     LOG_DEBUG_LEVEL5("RBDL JAC: \n {} \n\n", jacobianRBDLFlipped);
-
-//     checkApproxMatrix(jacobianRBDLFlipped, jacDL);
-//     #endif
-// }
-
-TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
-    std::shared_ptr<KDL::ChainFkSolverPos_recursive> jnt_to_cart;
-    std::shared_ptr<KDL::ChainJntToJacDotSolver> jnt_to_jacdot;
-    std::shared_ptr<KDL::ChainJntToJacSolver> jnt_to_jac;
-
-    std::shared_ptr<Chain<double> > c;
-    std::shared_ptr<ForwardKinematics<double> > fk;
+    setupPinocchio(urdfModel, pModel, pData);
 
     setupARDL(urdfModel, c, fk);
 
-    KDL::Chain chainKDL;
-    setupKDL(urdfModel, chainKDL, jnt_to_cart, jnt_to_jacdot, jnt_to_jac, c->getRootName(), c->getTipName());
-
-    std::shared_ptr<KDL::ChainFkSolverVel_recursive> jnt_to_vel = std::shared_ptr<KDL::ChainFkSolverVel_recursive>(new KDL::ChainFkSolverVel_recursive(chainKDL));
-
     Eigen::VectorXd q(c->getNumOfJoints());
-    Eigen::VectorXd qd(c->getNumOfJoints()), qdd(c->getNumOfJoints());
+    Eigen::VectorXd qd(c->getNumOfJoints()), qdd(c->getNumOfJoints()), changeTmp(c->getNumOfJoints());
 
     q.setZero();
     qd.setZero();
     qdd.setZero();
     randomJointState(q, qd, qdd);
 
-    Eigen::MatrixXd invAdj;
-    invAdj.resize(6, 6);
+    aligned_vector<AdjointSE3<double>> adjoints;
+    adjoints.resize(c->getNumOfJoints() + 1);
 
-    aligned_vector<AdjointSE3<double> > adjoints;
-    adjoints.resize(c->getNumOfJoints());
-    fk->getAdjoints(adjoints);
-
-    /******************KDL******************/
-    KDL::JntArrayVel KDL_state(c->getNumOfJoints());
-    KDL_state.q.data = q;
-    KDL_state.qdot.data = qd;
-    KDL::Jacobian jac(c->getNumOfJoints());
-
-    KDL::Jacobian jacDot(c->getNumOfJoints());
-
-    jnt_to_jacdot->setRepresentation(1);
-    using namespace std::chrono;
-    std::cout << "STEADY? " << std::chrono::steady_clock::is_steady << std::endl;
-    steady_clock::time_point t1, t2;
-    t1 = steady_clock::now();
-    jnt_to_jac->JntToJac(KDL_state.q, jac, chainKDL.getNrOfSegments());
-    jnt_to_jacdot->JntToJacDot(KDL_state, jacDot, chainKDL.getNrOfSegments());
-    t2 = steady_clock::now();
-
-    duration<double> time_span = duration_cast<duration<double> >(t2 - t1);
-
-    std::cout << "It took KDL " << time_span.count() << " seconds.";
-    std::cout << std::endl;
-
-    /******************END KDL******************/
-
-    aligned_vector<Jacobian<double> > jacobians, jacobianDots;
+    size_t dof= c->getNumOfJoints();
+    aligned_vector<Jacobian<double>> jacobians, jacobianDots, jacobiansP, jacobianDotsP;
     jacobians.resize(c->getNumOfJoints());
     jacobianDots.resize(c->getNumOfJoints());
-    for (int i = 0; i < c->getNumOfJoints(); i++) {
-        jacobians.at(i).resize(6, c->getNumOfJoints());
+    jacobiansP.resize(dof);
+    jacobianDotsP.resize(dof);
+    for(int i= 0; i < c->getNumOfJoints(); i++) {
+        jacobians.at(i).resize(c->getNumOfJoints());
         jacobians.at(i).setZero();
-        jacobianDots.at(i).resize(6, c->getNumOfJoints());
+        jacobiansP[i].resize(dof);
+        jacobiansP[i].setZero();
+        jacobianDots.at(i).resize(c->getNumOfJoints());
         jacobianDots.at(i).setZero();
+        jacobianDotsP[i].resize(dof);
+        jacobianDotsP[i].setZero();
     }
-    Jacobian<double> jacDL, jacDotDL;
-    jacDL.resize(6, c->getNumOfJoints());
-    jacDotDL.resize(6, c->getNumOfJoints());
-    t1 = steady_clock::now();
+
+    aligned_vector<LieBracketSE3<double>> adjs;
+    adjs.resize(c->getNumOfJoints());
+
+    ARDL::Dynamics<double> dyn(c);
+    constexpr ARDL::Frame frame= ARDL::Frame::SPATIAL;
     c->updateChain(q, qd);
     c->updateMatrices();
+    if constexpr(frame == ARDL::Frame::SPATIAL) {
+        fk->getAdjoints(adjoints);
+    } else if constexpr(frame == ARDL::Frame::BODY) {
+        fk->getBodyAdjoints(adjoints);
+    }
+    for(size_t i= 0; i < adjoints.size(); i++) {
+        std::cout << "Adjoint " << i << std::endl;
+        std::cout << adjoints[i] << std::endl;
+    }
+    c->updateMatricesOptim();
+    if constexpr(frame == ARDL::Frame::SPATIAL) {
+        fk->getAdjointsOptim(adjoints);
+    } else if constexpr(frame == ARDL::Frame::BODY) {
+        fk->getBodyAdjointsOptim(adjoints);
+    }
+    for(size_t i= 0; i < adjoints.size(); i++) {
+        std::cout << "AdjointOptim " << i << std::endl;
+        std::cout << adjoints[i] << std::endl;
+    }
+    fk->getJacobians<frame>(adjoints, jacobians);
+    pinocchio::forwardKinematics(pModel, pData, q, qd, qdd);
 
-    fk->getBodyJacobian(jacobians, jacobianDots);
-    fk->convertBodyToMixedJacobian(adjoints.back(), jacobians.back(), jacDL);
-    fk->convertBodyToMixedJacobianDot(adjoints.back(), jacDL, jacobianDots.back(), jacDotDL);
-    t2 = steady_clock::now();
-    time_span = duration_cast<duration<double> >(t2 - t1);
+    pinocchio::computeAllTerms(pModel, pData, q, qd);
+    pinocchio::computeForwardKinematicsDerivatives(pModel, pData, q, qd, qdd);
+    pinocchio::computeJointJacobiansTimeVariation(pModel, pData, q, qd);
+    pinocchio::computeJointJacobians(pModel, pData);
+    pinocchio::computeJointJacobians(pModel, pData);
+    for(size_t i= 0; i < dof; i++) {
+        pinocchio::getJointJacobian(pModel, pData, i + 1, pinocchio::WORLD, jacobiansP[i]);
+    }
+    std::cout<<"ARDL \n"<<jacobians[0]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[0]<<std::endl<<std::endl;
 
-    std::cout << "It took ARDL " << time_span.count() << " seconds.";
-    std::cout << std::endl;
+    std::cout<<"ARDL \n"<<jacobians[1]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[1]<<std::endl<<std::endl;
 
-    AdjointSE3<double> t = adjoints.back();
+    std::cout<<"ARDL \n"<<jacobians[2]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[2]<<std::endl<<std::endl;
+    std::cout<<"ARDL \n"<<jacobians[3]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[3]<<std::endl<<std::endl;
+    std::cout<<"ARDL \n"<<jacobians[4]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[4]<<std::endl<<std::endl;
+    std::cout<<"ARDL \n"<<jacobians[5]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[5]<<std::endl<<std::endl;
+    std::cout<<"ARDL \n"<<jacobians[6]<<std::endl<<std::endl;
+    std::cout<<"PIN \n"<<jacobiansP[6]<<std::endl<<std::endl;
+    for(size_t i= 0; i < dof; i++) { checkApproxMatrix(jacobians[i], jacobiansP[i], 1e-6); }
+pinocchio::getFrameJacobian(pModel, pData, pModel.frames.size()-1, pinocchio::WORLD, jacobiansP[6]);
+    std::cout<<"PIN \n"<<jacobiansP[6]<<std::endl<<std::endl;
+}
 
-    LOG_DEBUG_LEVEL3("ARDL JD {}", jacobianDots.back());
+TEST_CASE("JD1", "[adjoint][kinematics]") {
+    std::shared_ptr<Chain<double>> c;
+    std::shared_ptr<ForwardKinematics<double>> fk;
 
-    LOG_DEBUG_LEVEL3("KDL JD {}", jacDot.data);
-    checkApproxMatrix(jacobianDots.back(), jacDot.data, 1e-10);
+    pinocchio::Model pModel;
+    pinocchio::Data pData;
 
-    // jnt_to_jacdot->setRepresentation(2);
-    // jnt_to_jacdot->JntToJacDot(KDL_state, jacDot, chainKDL.getNrOfSegments());
-    // jacDL = adjoints.back().getMatrix() * jacobians.back();
-    // // fk->convertBodyToMixedJacobianDot(adjoints.back(), jacDL, jacobianDots.back(), jacDotDL);
-    // LieBracketSE3<double> mt_bodyVelocity;
-    // mt_bodyVelocity.getVelocity() = jacDL * qd;
-    // mt_bodyVelocity.calcMatrix();
+    setupPinocchio(urdfModel, pModel, pData);
 
-    // jacDotDL = adjoints.back().getMatrix() * jacobianDots.back() + mt_bodyVelocity.getMatrix() * jacDL;
+    setupARDL(urdfModel, c, fk);
 
-    // LOG_DEBUG_LEVEL3("ARDL JD {}", jacDotDL);
+    Eigen::VectorXd q(c->getNumOfJoints());
+    Eigen::VectorXd qd(c->getNumOfJoints()), qdd(c->getNumOfJoints()), changeTmp(c->getNumOfJoints());
 
-    // LOG_DEBUG_LEVEL3("KDL JD {}", jacDot.data);
+    q.setZero();
+    qd.setZero();
+    qdd.setZero();
+    randomJointState(q, qd, qdd);
 
-    // checkApproxMatrix(jacDotDL, jacDot.data, 1e-10);
+    aligned_vector<AdjointSE3<double>> adjoints;
+    adjoints.resize(c->getNumOfJoints() + 1);
 
-    // jnt_to_jac->JntToJac(KDL_state.q, jac, chainKDL.getNrOfSegments());
-    // jnt_to_jacdot->setRepresentation(0);
-    // jnt_to_jacdot->JntToJacDot(KDL_state, jacDot, chainKDL.getNrOfSegments());
+    size_t dof= c->getNumOfJoints();
+    aligned_vector<Jacobian<double>> jacobians, jacobianDots, jacobiansP, jacobianDotsP;
+    jacobians.resize(c->getNumOfJoints());
+    jacobianDots.resize(c->getNumOfJoints());
+    jacobiansP.resize(dof);
+    jacobianDotsP.resize(dof);
+    for(int i= 0; i < c->getNumOfJoints(); i++) {
+        jacobians.at(i).resize(c->getNumOfJoints());
+        jacobians.at(i).setZero();
+        jacobiansP[i].resize(dof);
+        jacobiansP[i].setZero();
+        jacobianDots.at(i).resize(c->getNumOfJoints());
+        jacobianDots.at(i).setZero();
+        jacobianDotsP[i].resize(dof);
+        jacobianDotsP[i].setZero();
+    }
 
-    // t1 = steady_clock::now();
-    // fk->getBodyJacobian(jacobians, jacobianDots);
-    // fk->convertBodyToMixedJacobian(adjoints.back(), jacobians.back(), jacDL);
-    // fk->convertBodyToMixedJacobianDot(adjoints.back(), jacDL, jacobianDots.back(), jacDotDL);
-    // t2 = steady_clock::now();
-    // time_span = duration_cast<duration<double> >(t2 - t1);
-    // std::cout << "It took me " << time_span.count() << " seconds.";
-    // std::cout << std::endl;
-    // LOG_DEBUG_LEVEL3("ARDL JD {}", jacDotDL);
+    aligned_vector<LieBracketSE3<double>> adjs;
+    adjs.resize(c->getNumOfJoints());
 
-    // LOG_DEBUG_LEVEL3("KDL JD {}", jacDot.data);
+    ARDL::Dynamics<double> dyn(c);
+    constexpr ARDL::Frame frame= ARDL::Frame::BODY;
+    c->updateChain(q, qd);
+    c->updateMatrices();
+    fk->getBodyAdjoints(adjoints);
+    fk->getJacobians<frame>(adjoints, jacobians);
 
-    // checkApproxMatrix(jacDotDL, jacDot.data, 1e-10);
+    fk->getLieBrackets(adjs, jacobians);
+
+    fk->getJacobianDots<frame>(adjoints, adjs, jacobians, jacobianDots);
+    for(size_t i= 0; i < dof; i++) {
+        std::cout << "JD " << i << std::endl;
+        std::cout << jacobianDots[i] << std::endl << std::endl;
+        // std::cout<<jacobianDotsP[i]<<std::endl<<std::endl;
+    }
+
+    for(int i= 0; i < c->getNumOfJoints(); i++) {
+        jacobians.at(i).setZero();
+        jacobiansP[i].setZero();
+        jacobianDots.at(i).setZero();
+        jacobianDotsP[i].setZero();
+    }
+    c->updateMatricesOptim();
+    if constexpr(frame == ARDL::Frame::SPATIAL) {
+        // fk->getAdjointsOptim(adjoints);
+    } else if constexpr(frame == ARDL::Frame::BODY) {
+        fk->getBodyAdjointsOptim(adjoints);
+    }
+    fk->getJacobians<frame>(adjoints, jacobians);
+
+    fk->getLieBrackets(adjs, jacobians);
+
+    fk->getJacobianDots<frame>(adjoints, adjs, jacobians, jacobianDots);
+    pinocchio::forwardKinematics(pModel, pData, q, qd, qdd);
+
+    pinocchio::computeAllTerms(pModel, pData, q, qd);
+    pinocchio::computeForwardKinematicsDerivatives(pModel, pData, q, qd, qdd);
+    pinocchio::computeJointJacobians(pModel, pData);
+    pinocchio::computeJointJacobiansTimeVariation(pModel, pData, q, qd);
+    for(size_t i= 0; i < dof; i++) {
+        pinocchio::getJointJacobian(pModel, pData, i + 1, pinocchio::LOCAL, jacobiansP[i]);
+
+        pinocchio::getJointJacobianTimeVariation(pModel, pData, i + 1, pinocchio::LOCAL, jacobianDotsP[i]);
+    }
+    for(size_t i= 0; i < dof; i++) {
+        checkApproxMatrix(jacobians[i], jacobiansP[i], 1e-6);
+        std::cout << "JD " << i << std::endl;
+        std::cout << jacobianDots[i] << std::endl << std::endl;
+        std::cout << jacobianDotsP[i] << std::endl << std::endl;
+    }
 }

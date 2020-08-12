@@ -14,300 +14,430 @@
 #include "ARDL/Model/Joint.hpp"
 #include "ARDL/Model/Joints/Joints.hpp"
 #include "ARDL/typedefs.hpp"
+#include "ARDL/Math/SpatialInertia.hpp"
 
 namespace ARDL {
     using namespace Util::Math;
     using namespace Util::Collision;
     namespace Model {
         using namespace Joints;
-        template<typename T> class Link : public std::enable_shared_from_this < Link<T> > {
-        private:
-            bool m_isRoot, m_hasInertial, m_hasCollision = false;
+        template<typename T>
+        class Link
+#if !ARDL_EXTERNAL_DATA
+            : public std::enable_shared_from_this<Link<T>>
+#endif
+        {
+             private:
+#if !ARDL_EXTERNAL_DATA
+            bool m_isRoot, m_hasInertial, m_hasCollision;
             std::string m_name;
 
             Eigen::Matrix<T, 12, 1> m_inertialParameters;
 
-            std::shared_ptr<Joint<T> > m_parentJoint_sp;
-            std::shared_ptr<Link<T> > m_parentLink_sp;
+            JointVariant<T> *m_parentJoint_p;
+            Link<T> *m_parentLink_p;
 
-            std::map<std::string, std::shared_ptr<Joint<T> > > m_childJoints_sm;
-
-            fcl::Transform3<T> mt_collisionOffset;
-
-            const Eigen::Matrix<T, 3, 3> mt_identity3x3 = Eigen::Matrix<T, 3, 3>::Identity();
-
-            std::shared_ptr<fcl::BVHModel<fcl::OBB<T> > > m_collisionModel_sp;
-            std::shared_ptr<fcl::CollisionObject<T> > m_collisionObject_sp;
+            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>> m_collisionModel_sp, m_collisionModelOptimal_sp;
+            std::shared_ptr<fcl::CollisionObject<T>> m_collisionObject_sp, m_collisionObjectOptimal_sp;
             std::vector<std::string> m_collisionFiles;
 
-            SpatialInertia<T> m_spatialInertia;
+            SpatialInertia<T> m_sI;
+
+            urdf::LinkConstSharedPtr urdfModel;
+#else
+            char &m_isRoot, &m_hasInertial, &m_hasCollision;
+            std::string &m_name;
+
+            Eigen::Matrix<T, 12, 1> &m_inertialParameters;
+
+            JointVariant<T> *m_parentJoint_p;
+            Link<T> *m_parentLink_p;
+
+            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>> &m_collisionModel_sp, &m_collisionModelOptimal_sp;
+            std::shared_ptr<fcl::CollisionObject<T>> &m_collisionObject_sp, m_collisionObjectOptimal_sp;
+            std::vector<std::string> &m_collisionFiles;
+
+            SpatialInertia<T> &m_sI;
 
             urdf::LinkConstSharedPtr urdfModel;
 
-            void calculateSpatialInertia() {
-                skewMatrix(m_inertialParameters.template segment<3>(1), m_spatialInertia.template block<3, 3>(3, 0));
-                m_spatialInertia.template block<3, 3>(0, 3) = -m_spatialInertia.template block<3, 3>(3, 0);
-                m_spatialInertia(3, 3) = m_inertialParameters(4);
-                m_spatialInertia(4, 4) = m_inertialParameters(5);
-                m_spatialInertia(5, 5) = m_inertialParameters(6);
-                m_spatialInertia(3, 4) = m_inertialParameters(7);
-                m_spatialInertia(4, 3) = m_inertialParameters(7);
-                m_spatialInertia(3, 5) = m_inertialParameters(8);
-                m_spatialInertia(5, 3) = m_inertialParameters(8);
-                m_spatialInertia(4, 5) = m_inertialParameters(9);
-                m_spatialInertia(5, 4) = m_inertialParameters(9);
+#endif
 
-                m_spatialInertia.template block < 3, 3 > (0, 0) = m_inertialParameters(0) * mt_identity3x3;
-            }
+             public:
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+#if !ARDL_EXTERNAL_DATA
+            Link(const Link<T> &copy, JointVariant<T> *parentJoint, Link<T> *parentLink)
+#else
+            Link(const Link<T> &copy, JointVariant<T> *parentJoint, Link<T> *parentLink, ARDL::Data<T> &data, size_t i)
+                : m_isRoot(data.isRoot[i]), m_hasInertial(data.hasInertial[i]), m_hasCollision(data.hasCollision[i]),
+                  m_name(data.name[i]), m_inertialParameters(data.inertialParameters[i]),
+                  m_collisionModel_sp(data.collisionModel_sp[i]),
+                  m_collisionModelOptimal_sp(data.collisionModelOptimal_sp[i]),
+                  m_collisionObject_sp(data.collisionObject_sp[i]), ,
+                  m_collisionObjectOptimal_sp(data.collisionObjectOptimal_sp) m_collisionFiles(data.collisionFiles[i]),
+                  m_sI(data.sI[i])
+#endif
+            {
+                m_isRoot= copy.m_isRoot;
+                m_hasInertial= copy.m_hasInertial;
+                m_hasCollision= copy.m_hasCollision;
 
-        public:
-
-            Link(const Link<T> &copy, std::shared_ptr<Joint<T> > parentJoint, std::shared_ptr<Link<T> > parentLink) {
-                m_isRoot = copy.m_isRoot;
-                m_hasInertial = copy.m_hasInertial;
-                m_hasCollision = copy.m_hasCollision;
-
-                m_name = copy.m_name;
-                if (m_hasInertial) {
-                    m_inertialParameters = copy.m_inertialParameters;
-                    m_spatialInertia = copy.m_spatialInertia;
+                m_name= copy.m_name;
+                if(m_hasInertial) {
+                    m_inertialParameters= copy.m_inertialParameters;
+                    m_sI= copy.m_sI;
                 }
-                m_parentJoint_sp = parentJoint;
-                m_parentLink_sp = parentLink;
-                if (m_hasCollision) {
-                    mt_collisionOffset = copy.mt_collisionOffset;
-                    m_collisionModel_sp = std::shared_ptr<fcl::BVHModel<fcl::OBB<T> > >(new fcl::BVHModel<fcl::OBB<T> >(*(copy.m_collisionModel_sp)));
-                    m_collisionObject_sp = std::shared_ptr<fcl::CollisionObject<T> >(new fcl::CollisionObject<T>(*(copy.m_collisionObject_sp)));
-                    m_collisionFiles = copy.m_collisionFiles;
+
+                m_parentLink_p= parentLink;
+                m_parentJoint_p= parentJoint;
+                if(m_hasCollision) {
+                    m_collisionModel_sp= std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(
+                        new fcl::BVHModel<fcl::OBB<T>>(*(copy.m_collisionModel_sp)));
+                    if(copy.m_collisionModelOptimal_sp) {
+                        m_collisionModelOptimal_sp= std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(
+                            new fcl::BVHModel<fcl::OBB<T>>(*(copy.m_collisionModelOptimal_sp)));
+                    }
+                    m_collisionObject_sp= std::shared_ptr<fcl::CollisionObject<T>>(
+                        new fcl::CollisionObject<T>(*(copy.m_collisionObject_sp)));
+                    if(copy.m_collisionModelOptimal_sp) {
+                        m_collisionObjectOptimal_sp= std::shared_ptr<fcl::CollisionObject<T>>(
+                            new fcl::CollisionObject<T>(*(copy.m_collisionObjectOptimal_sp)));
+                    }
+                    m_collisionFiles= copy.m_collisionFiles;
                 }
+                this->urdfModel= copy.urdfModel;
             }
-            Link(const Link<T> &copy) = delete;
 
             /***************** INITIALIZATION HANDLING *****************/
-            Link(urdf::LinkConstSharedPtr link, bool root, std::shared_ptr<Link<T> > parent_sp) : urdfModel(link) {
-                m_isRoot = root;
-                m_name = link->name;
-                m_parentLink_sp = parent_sp;
-                if (link->inertial) {
-                    m_hasInertial = true;
+
+#if !ARDL_EXTERNAL_DATA
+            Link(urdf::LinkConstSharedPtr link, Link<T> *parentLink, JointVariant<T> *parentJoint)
+                : urdfModel(link)
+#else
+            Link(urdf::LinkConstSharedPtr link, Link<T> *parentLink, JointVariant<T> *parentJoint, ARDL::Data<T> &data,
+                 size_t i)
+                : urdfModel(link), m_isRoot(data.isRoot[i]), m_hasInertial(data.hasInertial[i]),
+                  m_hasCollision(data.hasCollision[i]), m_name(data.name[i]),
+                  m_inertialParameters(data.inertialParameters[i]), m_collisionModel_sp(data.collisionModel_sp[i]),
+                  m_collisionModelOptimal_sp(data.collisionModelOptimal_sp[i]),
+                  m_collisionObject_sp(data.collisionObject_sp[i]),
+                  m_collisionObjectOptimal_sp(collisionObjectOptimal_sp), m_collisionFiles(data.collisionFiles[i]),
+                  m_sI(data.sI[i])
+#endif
+            {
+                m_name= link->name;
+                m_isRoot= (parentLink == nullptr);
+                m_parentLink_p= parentLink;
+                m_parentJoint_p= parentJoint;
+
+                    m_hasInertial= true;
+                if(link->inertial) {
                     m_inertialParameters.setZero();
-                    m_inertialParameters(0) = link->inertial->mass;
+                    m_inertialParameters(0)= link->inertial->mass;
 
                     Eigen::Quaterniond t_quaternion;
-                    link->inertial->origin.rotation.getQuaternion(t_quaternion.x(), t_quaternion.y(), t_quaternion.z(), t_quaternion.w());
+                    link->inertial->origin.rotation.getQuaternion(t_quaternion.x(), t_quaternion.y(), t_quaternion.z(),
+                                                                  t_quaternion.w());
 
-                    Eigen::Matrix<T, 3, 3> t_rotationCOM = t_quaternion.toRotationMatrix().cast<T>();
+                    Eigen::Matrix<T, 3, 3> t_rotationCOM= t_quaternion.toRotationMatrix().cast<T>();
 
                     Eigen::Matrix<T, 3, 1> t_translationCOM;
-                    t_translationCOM << link->inertial->origin.position.x, link->inertial->origin.position.y, link->inertial->origin.position.z;
+                    t_translationCOM << link->inertial->origin.position.x, link->inertial->origin.position.y,
+                        link->inertial->origin.position.z;
 
-                    m_inertialParameters.template segment<3>(1) = m_inertialParameters(0) * t_translationCOM;
+                    m_inertialParameters.template segment<3>(1)= m_inertialParameters(0) * t_translationCOM;
 
                     Eigen::Matrix<T, 3, 3> t_rotInertiaWRTOrigin;
-                    t_rotInertiaWRTOrigin(0, 0) = link->inertial->ixx;
-                    t_rotInertiaWRTOrigin(1, 1) = link->inertial->iyy;
-                    t_rotInertiaWRTOrigin(2, 2) = link->inertial->izz;
-                    t_rotInertiaWRTOrigin(0, 1) = t_rotInertiaWRTOrigin(1, 0) = link->inertial->ixy;
-                    t_rotInertiaWRTOrigin(0, 2) = t_rotInertiaWRTOrigin(2, 0) = link->inertial->ixz;
-                    t_rotInertiaWRTOrigin(1, 2) = t_rotInertiaWRTOrigin(2, 1) = link->inertial->iyz;
+                    t_rotInertiaWRTOrigin(0, 0)= link->inertial->ixx;
+                    t_rotInertiaWRTOrigin(1, 1)= link->inertial->iyy;
+                    t_rotInertiaWRTOrigin(2, 2)= link->inertial->izz;
+                    t_rotInertiaWRTOrigin(0, 1)= t_rotInertiaWRTOrigin(1, 0)= link->inertial->ixy;
+                    t_rotInertiaWRTOrigin(0, 2)= t_rotInertiaWRTOrigin(2, 0)= link->inertial->ixz;
+                    t_rotInertiaWRTOrigin(1, 2)= t_rotInertiaWRTOrigin(2, 1)= link->inertial->iyz;
 
-                    Eigen::Matrix<T, 3, 3> t_rotInertiaWRTCOM = t_rotationCOM * t_rotInertiaWRTOrigin;
+                    Eigen::Matrix<T, 3, 3> t_rotInertiaWRTCOM= t_rotationCOM * t_rotInertiaWRTOrigin;
 
                     Eigen::Matrix<T, 3, 3> t_translationCOMSkew;
+                    t_translationCOMSkew.setZero();
                     skewMatrix(t_translationCOM, t_translationCOMSkew);
 
-                    t_rotInertiaWRTCOM = t_rotInertiaWRTCOM + (t_translationCOMSkew * t_translationCOMSkew.transpose() * m_inertialParameters(0));
+                    t_rotInertiaWRTCOM= t_rotInertiaWRTCOM + (t_translationCOMSkew * t_translationCOMSkew.transpose() *
+                                                              m_inertialParameters(0));
 
-                    m_inertialParameters(4) = t_rotInertiaWRTCOM(0, 0);//xx
-                    m_inertialParameters(5) = t_rotInertiaWRTCOM(1, 1);//yy
-                    m_inertialParameters(6) = t_rotInertiaWRTCOM(2, 2);//zz
-                    m_inertialParameters(7) = t_rotInertiaWRTCOM(0, 1);//xy
-                    m_inertialParameters(8) = t_rotInertiaWRTCOM(0, 2);//xz
-                    m_inertialParameters(9) = t_rotInertiaWRTCOM(1, 2);//yz
-                    calculateSpatialInertia();
+                    m_inertialParameters(4)= t_rotInertiaWRTCOM(0, 0); // xx
+                    m_inertialParameters(5)= t_rotInertiaWRTCOM(1, 1); // yy
+                    m_inertialParameters(6)= t_rotInertiaWRTCOM(2, 2); // zz
+                    m_inertialParameters(7)= t_rotInertiaWRTCOM(0, 1); // xy
+                    m_inertialParameters(8)= t_rotInertiaWRTCOM(0, 2); // xz
+                    m_inertialParameters(9)= t_rotInertiaWRTCOM(1, 2); // yz
+                    m_sI= SpatialInertia<T>(m_inertialParameters);
+                }
+                else{
+                    m_inertialParameters.setZero();
+                    m_sI =  SpatialInertia<T>(m_inertialParameters);
                 }
 
-                if (link->collision) {
-                    m_hasCollision = true;
-                    //If made of multiple collision primitives
-                    // std::cout << "collision meshes: " << link->collision_array.size() << std::endl;
-                    if (link->collision_array.size() > 1) {
-                        m_collisionModel_sp = std::shared_ptr<fcl::BVHModel<fcl::OBB<T> > >(new fcl::BVHModel<fcl::OBB<T> >());
-                        for (size_t i = 0; i < link->collision_array.size(); i++) {
-                            mt_collisionOffset.setIdentity();
-                            mt_collisionOffset.translation() = Eigen::Vector3f(link->collision_array[i]->origin.position.x, link->collision_array[i]->origin.position.y, link->collision_array[i]->origin.position.z).cast<T>();
-                            Eigen::Quaterniond quat;
-                            link->collision_array[i]->origin.rotation.getQuaternion(quat.x(), quat.y(), quat.z(), quat.w());
-                            mt_collisionOffset.linear() = quat.cast<T>().matrix();
-
-                            std::shared_ptr<urdf::Mesh> t_mesh_sp = std::dynamic_pointer_cast<urdf::Mesh>(link->collision_array[i]->geometry);
-                            if (t_mesh_sp) {
-                                Eigen::Matrix<T, 3, 1> t_scale(t_mesh_sp->scale.x, t_mesh_sp->scale.y, t_mesh_sp->scale.z);
-                                m_collisionFiles.push_back(t_mesh_sp->filename);
-                                createMesh<fcl::OBB<T> >(m_collisionModel_sp, t_scale, t_mesh_sp->filename, mt_collisionOffset);
-                            } else {
-                                std::shared_ptr<urdf::Cylinder> cylinder = std::dynamic_pointer_cast<urdf::Cylinder>(link->collision_array[i]->geometry);
-                                if (cylinder) {
-                                    createCylinder<fcl::OBB<T> >(m_collisionModel_sp, (T)cylinder->radius, (T)cylinder->length, mt_collisionOffset);
-                                    m_collisionFiles.push_back("CYLINDER");
-                                } else {
-                                    std::shared_ptr<urdf::Box> box = std::dynamic_pointer_cast<urdf::Box>(link->collision_array[i]->geometry);
-                                    if (box) {
-                                        Eigen::Matrix<T, 3, 1> scale;
-                                        scale << (T)box->dim.x, (T)box->dim.y, (T)box->dim.z;
-                                        createBox<fcl::OBB<T> >(m_collisionModel_sp, scale, mt_collisionOffset);
-                                        m_collisionFiles.push_back("BOX");
-                                    } else {
-                                        std::shared_ptr<urdf::Sphere> sphere = std::dynamic_pointer_cast<urdf::Sphere>(link->collision_array[i]->geometry);
-                                        if (sphere) {
-                                            createSphere<fcl::OBB<T> >(m_collisionModel_sp, (T)sphere->radius, mt_collisionOffset);
-                                            m_collisionFiles.push_back("SPHERE");
-                                        }
-                                    }
-                                }
-                            }
+                if(link->collision) {
+                    m_hasCollision= true;
+                    // If made of multiple collision primitives
+                    if(link->collision_array.size() > 1) {
+                        m_collisionModel_sp=
+                            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(new fcl::BVHModel<fcl::OBB<T>>());
+                        for(size_t i= 0; i < link->collision_array.size(); i++) {
+                            loadCollision(link->collision_array[i]);
                         }
                         m_collisionModel_sp->endModel();
                         m_collisionModel_sp->computeLocalAABB();
                     } else {
-                        //made of a single collision object
-                        m_collisionModel_sp = std::shared_ptr<fcl::BVHModel<fcl::OBB<T> > >(new fcl::BVHModel<fcl::OBB<T> >());
-                        mt_collisionOffset.setIdentity();
-                        mt_collisionOffset.translation() = Eigen::Vector3f(link->collision->origin.position.x, link->collision->origin.position.y, link->collision->origin.position.z).cast<T>();
-                        Eigen::Quaterniond quat;
-                        link->collision->origin.rotation.getQuaternion(quat.x(), quat.y(), quat.z(), quat.w());
-                        mt_collisionOffset.linear() = quat.cast<T>().matrix();
-
-                        std::shared_ptr<urdf::Mesh> t_mesh_sp = std::dynamic_pointer_cast<urdf::Mesh>(link->collision->geometry);
-                        if (t_mesh_sp) {
-                            Eigen::Matrix<T, 3, 1> t_scale(t_mesh_sp->scale.x, t_mesh_sp->scale.y, t_mesh_sp->scale.z);
-                            m_collisionFiles.push_back(t_mesh_sp->filename);
-                            createMesh<fcl::OBB<T> >(m_collisionModel_sp, t_scale, t_mesh_sp->filename, mt_collisionOffset);
-                        } else {
-                            std::shared_ptr<urdf::Cylinder> cylinder = std::dynamic_pointer_cast<urdf::Cylinder>(link->collision->geometry);
-                            if (cylinder) {
-                                createCylinder<fcl::OBB<T> >(m_collisionModel_sp, (T)cylinder->radius, (T)cylinder->length, mt_collisionOffset);
-                                m_collisionFiles.push_back("CYLINDER");
-                            } else {
-                                std::shared_ptr<urdf::Box> box = std::dynamic_pointer_cast<urdf::Box>(link->collision->geometry);
-                                if (box) {
-                                    Eigen::Matrix<T, 3, 1> scale;
-                                    scale << (T)box->dim.x, (T)box->dim.y, (T)box->dim.z;
-                                    createBox<fcl::OBB<T> >(m_collisionModel_sp, scale, mt_collisionOffset);
-                                    m_collisionFiles.push_back("BOX");
-                                } else {
-                                    std::shared_ptr<urdf::Sphere> sphere = std::dynamic_pointer_cast<urdf::Sphere>(link->collision->geometry);
-                                    if (sphere) {
-                                        createSphere<fcl::OBB<T> >(m_collisionModel_sp, (T)sphere->radius, mt_collisionOffset);
-                                        m_collisionFiles.push_back("SPHERE");
-                                    }
-                                }
-                            }
-                        }
+                        // made of a single collision object
+                        m_collisionModel_sp=
+                            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(new fcl::BVHModel<fcl::OBB<T>>());
+                        loadCollision(link->collision);
 
                         m_collisionModel_sp->endModel();
                         m_collisionModel_sp->computeLocalAABB();
                     }
                     m_collisionObject_sp.reset(new fcl::CollisionObject<T>(m_collisionModel_sp));
+                    if(!m_isRoot && m_parentLink_p->m_hasCollision &&
+                       m_parentLink_p->m_collisionModelOptimal_sp != nullptr &&
+                       ARDL_visit(*m_parentJoint_p, isFixed())) {
+                        m_collisionModelOptimal_sp=
+                            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(new fcl::BVHModel<fcl::OBB<T>>());
+                        std::vector<Matrix<T, 3, 1>> ps;
+                        std::vector<fcl::Triangle> ts;
+
+                        AdjointSE3 transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
+                        fcl::Transform3<T> t_collisionOffset;
+                        t_collisionOffset.translation()= transform.getP();
+                        t_collisionOffset.linear()= transform.getR();
+                        for(size_t i= 0; i < m_collisionModel_sp->num_vertices; i++) {
+                            ps.push_back(t_collisionOffset * (m_collisionModel_sp->vertices)[i]);
+                        }
+                        for(size_t i= 0; i < m_collisionModel_sp->num_tris; i++) {
+                            ts.push_back(m_collisionModel_sp->tri_indices[i]);
+                        }
+                        for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
+                            ps.push_back((m_parentLink_p->m_collisionModelOptimal_sp->vertices)[j]);
+                        }
+                        for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_tris; j++) {
+                            ts.push_back(m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j]);
+                            ts.back()[0]+= m_collisionModel_sp->num_vertices;
+                            ts.back()[1]+= m_collisionModel_sp->num_vertices;
+                            ts.back()[2]+= m_collisionModel_sp->num_vertices;
+                        }
+
+                        m_collisionModelOptimal_sp->beginModel();
+                        if(m_collisionModelOptimal_sp->addSubModel(ps, ts) != fcl::BVH_OK) {
+                            std::cerr << "COLLISION FAIL" << std::endl;
+                        };
+
+                        // for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
+                        // m_collisionModelOptimal_sp->addTriangle(vertices[0], vertices[1], vertices[2]);
+                        // }
+                        m_collisionModelOptimal_sp->endModel();
+                        m_collisionModelOptimal_sp->computeLocalAABB();
+                        m_parentLink_p->m_collisionModelOptimal_sp= m_collisionModelOptimal_sp;
+                        m_collisionModelOptimal_sp= nullptr;
+                        m_parentLink_p->m_collisionModelOptimal_sp->computeLocalAABB();
+
+                        m_parentLink_p->m_collisionObjectOptimal_sp.reset(
+                            new fcl::CollisionObject<T>(m_parentLink_p->m_collisionModelOptimal_sp));
+                    } else if(m_hasCollision) {
+                        m_collisionModelOptimal_sp= std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(
+                            new fcl::BVHModel<fcl::OBB<T>>(*(m_collisionModel_sp)));
+                        m_collisionObjectOptimal_sp.reset(new fcl::CollisionObject<T>(m_collisionModelOptimal_sp));
+                    }
+                }
+                if(!m_isRoot) {
+                    if(!ARDL_visit(*m_parentJoint_p, isFixed())) {
+                        m_inertialParameters[10]= T(ARDL_visit(*m_parentJoint_p, getViscousFriction()));
+                        m_inertialParameters[11]= T(ARDL_visit(*m_parentJoint_p, getStaticFriction()));
+                    }
+                    if(ARDL_visit(*m_parentJoint_p, isFixed()) && !m_parentLink_p->isRoot()) {
+                        AdjointSE3<T> t_fixedTransform= ARDL_visit(*m_parentJoint_p, getOriginTransform());
+                        Link<T> *parentL= m_parentLink_p;
+                        while(ARDL_visit(*(parentL->m_parentJoint_p), isFixed())) {
+                            t_fixedTransform.apply(ARDL_visit(*(parentL->m_parentJoint_p), getOriginTransform()));
+
+                            parentL= parentL->m_parentLink_p;
+                        }
+                        if(m_hasInertial) {
+                            m_sI.applyInverseXIX(t_fixedTransform);
+                            parentL->m_sI+= m_sI;
+                            // parentL->m_sI.applyXIX(t_fixedTransform);
+                            // m_sI = parentL->m_sI;
+                        }
+                    } // TODO HERE!!
+                    // else{
+                    //     if(!m_isRoot && m_parentLink_p->m_hasCollision &&
+                    //    m_parentLink_p->m_collisionModelOptimal_sp != nullptr &&
+                    //    ARDL_visit(*m_parentJoint_p, isFixed())) {
+                    //     std::cout << "OPTIMAL != NON-OPTIMAL" << std::endl;
+                    //     m_collisionModelOptimal_sp=
+                    //         std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(new fcl::BVHModel<fcl::OBB<T>>());
+                    //     std::vector<Matrix<T, 3, 1>> ps;
+                    //     std::vector<fcl::Triangle> ts;
+
+                    //     for(size_t i= 0; i < m_collisionModel_sp->num_vertices; i++) {
+                    //         ps.push_back((m_collisionModel_sp->vertices)[i]);
+                    //     }
+                    //     for(size_t i= 0; i < m_collisionModel_sp->num_tris; i++) {
+                    //         ts.push_back(m_collisionModel_sp->tri_indices[i]);
+                    //     }
+
+                    //     AdjointSE3 transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
+                    //     transform.inverse();
+                    //     fcl::Transform3<T> t_collisionOffset;
+                    //     t_collisionOffset.translation()= transform.getP();
+                    //     t_collisionOffset.linear()= transform.getR();
+                    //     std::cout << "transform!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+                    //     std::cout << transform << std::endl;
+                    //     std::cout << "ps.size()" << std::endl;
+                    //     std::cout << ps.size() << std::endl;
+                    //     for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
+                    //         ps.push_back(t_collisionOffset*(m_parentLink_p->m_collisionModelOptimal_sp->vertices)[j]);
+                    //         // std::cout << ps.back().transpose() << std::endl;
+                    //     }
+                    //     // std::cout << ps.size() << std::endl;
+                    //     for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_tris; j++) {
+                    //         ts.push_back(m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j]);
+
+                    //         // std::cout << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][0] << ", "
+                    //         //           << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][1] << ", "
+                    //         //           << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][2] <<
+                    //         std::endl; ts.back()[0]+= m_collisionModel_sp->num_vertices; ts.back()[1]+=
+                    //         m_collisionModel_sp->num_vertices; ts.back()[2]+= m_collisionModel_sp->num_vertices;
+                    //         // std::cout << ts.back()[0] << ", " << ts.back()[1] << ", " << ts.back()[2] <<
+                    //         std::endl;
+                    //     }
+
+                    //     m_collisionModelOptimal_sp->beginModel();
+                    //     if(m_collisionModelOptimal_sp->addSubModel(ps, ts) != fcl::BVH_OK) {
+                    //         std::cerr << "COLLISION FAIL" << std::endl;
+                    //     };
+
+                    //     // for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
+                    //     // m_collisionModelOptimal_sp->addTriangle(vertices[0], vertices[1], vertices[2]);
+                    //     // }
+                    //     m_collisionModelOptimal_sp->endModel();
+                    //     m_collisionModelOptimal_sp->computeLocalAABB();
+                    //     m_parentLink_p->m_collisionModelOptimal_sp= m_collisionModelOptimal_sp;
+                    //     m_collisionModelOptimal_sp = nullptr;
+                    // } else if(m_hasCollision) {
+                    //     std::cout << "OPTIMAL = NON-OPTIMAL" << std::endl;
+                    //     m_collisionModelOptimal_sp= std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(
+                    //         new fcl::BVHModel<fcl::OBB<T>>(*(m_collisionModel_sp)));
+                    //     std::cout << m_collisionModelOptimal_sp->num_vertices << std::endl;
+                    // }
+                    // m_collisionObjectOptimal_sp.reset(new fcl::CollisionObject<T>(m_collisionModelOptimal_sp));
+                    // }
                 }
             }
-
-            Link(urdf::LinkConstSharedPtr link) : Link(link, false, nullptr) {};
+#if !ARDL_EXTERNAL_DATA
+            Link(urdf::LinkConstSharedPtr link): Link(link, nullptr, nullptr){};
+#else
+            Link(urdf::LinkConstSharedPtr link, ARDL::Data<T> &data, size_t i): Link(link, false, -1, -1, data, i){};
+#endif
 
             ~Link() {}
 
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+            void loadCollision(const urdf::CollisionSharedPtr &collision) {
+                fcl::Transform3<T> t_collisionOffset;
+                t_collisionOffset.setIdentity();
+                t_collisionOffset.translation()=
+                    Eigen::Vector3f(collision->origin.position.x, collision->origin.position.y,
+                                    collision->origin.position.z)
+                        .cast<T>();
+                Eigen::Quaterniond quat;
+                collision->origin.rotation.getQuaternion(quat.x(), quat.y(), quat.z(), quat.w());
+                t_collisionOffset.linear()= quat.cast<T>().matrix();
 
-            std::vector<std::shared_ptr<Joint<T> > > loadChildJoints(urdf::LinkConstSharedPtr link) {
-                if (!m_isRoot) {
-                    m_parentJoint_sp = m_parentLink_sp->getJointGoingToChild(m_name);
-
-                    if (!m_parentJoint_sp->isFixed()) {
-                        m_inertialParameters[10] = T(m_parentJoint_sp->getViscousFriction());
-                        m_inertialParameters[11] = T(m_parentJoint_sp->getStaticFriction());
-                    }
-
-                    if (m_parentJoint_sp->isFixed() && !m_parentLink_sp->isRoot()) {
-                        std::shared_ptr<Link<T> > t_link = m_parentLink_sp;
-                        while (t_link->getParentJoint()->isFixed()) {
-                            t_link = t_link->getParentLink();
-                        }
-
-                        AdjointSE3<T> t_fixedTransform;
-                        t_fixedTransform = m_parentJoint_sp->getOriginTransform();
-                        if (m_hasInertial) {
-                            t_fixedTransform.applyXIX(t_link->getInertialParams().template segment<10>(0), t_link->getInertialParams().template segment<10>(0));
-                            t_link->setInertialParams(t_link->getInertialParams().template segment<10>(0) + m_inertialParameters.template segment<10>(0));
+                std::shared_ptr<urdf::Mesh> t_mesh_sp= std::dynamic_pointer_cast<urdf::Mesh>(collision->geometry);
+                if(t_mesh_sp) {
+                    Eigen::Matrix<T, 3, 1> t_scale(t_mesh_sp->scale.x, t_mesh_sp->scale.y, t_mesh_sp->scale.z);
+                    m_collisionFiles.push_back(t_mesh_sp->filename);
+                    createMesh<fcl::OBB<T>>(m_collisionModel_sp, t_scale, t_mesh_sp->filename, t_collisionOffset);
+                } else {
+                    std::shared_ptr<urdf::Cylinder> cylinder=
+                        std::dynamic_pointer_cast<urdf::Cylinder>(collision->geometry);
+                    if(cylinder) {
+                        createCylinder<fcl::OBB<T>>(m_collisionModel_sp, (T) cylinder->radius, (T) cylinder->length,
+                                                    t_collisionOffset);
+                        m_collisionFiles.push_back("CYLINDER");
+                    } else {
+                        std::shared_ptr<urdf::Box> box= std::dynamic_pointer_cast<urdf::Box>(collision->geometry);
+                        if(box) {
+                            Eigen::Matrix<T, 3, 1> scale;
+                            scale << (T) box->dim.x, (T) box->dim.y, (T) box->dim.z;
+                            createBox<fcl::OBB<T>>(m_collisionModel_sp, scale, t_collisionOffset);
+                            m_collisionFiles.push_back("BOX");
+                        } else {
+                            std::shared_ptr<urdf::Sphere> sphere=
+                                std::dynamic_pointer_cast<urdf::Sphere>(collision->geometry);
+                            if(sphere) {
+                                createSphere<fcl::OBB<T>>(m_collisionModel_sp, (T) sphere->radius, t_collisionOffset);
+                                m_collisionFiles.push_back("SPHERE");
+                            }
                         }
                     }
                 }
+            }
 
-                std::vector<std::shared_ptr<Joint<T> > > jointList;
-                for (urdf::JointSharedPtr joint : link->child_joints) {
-                    switch (joint->type) {
-                    case urdf::Joint::REVOLUTE:
-                        m_childJoints_sm[joint->child_link_name].reset(new RevoluteJoint<T>(joint, this->shared_from_this()));
-                        jointList.push_back(m_childJoints_sm[joint->child_link_name]);
-                        break;
-                    case urdf::Joint::PRISMATIC:
-                        throw std::runtime_error("PRISMATIC JOINT NOT IMPLEMENTED");
-                        break;
-                    case urdf::Joint::FIXED:
-                        m_childJoints_sm[joint->child_link_name].reset(new FixedJoint<T>(joint, this->shared_from_this()));
-                        jointList.push_back(m_childJoints_sm[joint->child_link_name]);
-                        break;
-                    default:
+#if !ARDL_EXTERNAL_DATA
+            void loadChildJoint(std::string childName, aligned_vector<JointVariant<T>> &joints_all_vsp)
+#else
+            void loadChildJoint(std::string childName, ARDL::Data<T> &data, size_t i)
+#endif
+            {
+                for(urdf::JointSharedPtr joint: urdfModel->child_joints) {
+                    if(joint->child_link_name == childName) {
+                        switch(joint->type) {
+#if !ARDL_EXTERNAL_DATA
+                        case urdf::Joint::REVOLUTE: joints_all_vsp.emplace_back(RevoluteJoint<T>(joint, *this)); break;
+                        case urdf::Joint::PRISMATIC: throw std::runtime_error("PRISMATIC JOINT NOT IMPLEMENTED"); break;
+                        case urdf::Joint::FIXED: joints_all_vsp.emplace_back(FixedJoint<T>(joint, *this)); break;
+#else
+                        case urdf::Joint::REVOLUTE:
+                            data.addJoint(false, RevoluteJoint<T>::getDof());
+                            data.joints_all.emplace_back(RevoluteJoint<T>(joint, *this, data, i));
+                            break;
+                        case urdf::Joint::PRISMATIC: throw std::runtime_error("PRISMATIC JOINT NOT IMPLEMENTED"); break;
+                        case urdf::Joint::FIXED:
+                            data.addJoint(true, FixedJoint<T>::getDof());
+                            data.joints_all.emplace_back(FixedJoint<T>(joint, *this, data, i));
+                            break;
+#endif
+                        default: throw std::runtime_error("DEFAULT JOINT NOT IMPLEMENTED"); break;
+                        }
                         break;
                     }
                 }
-
-                return jointList;
             }
 
             /***************** END INITIALIZATION HANDLING *****************/
 
-            Eigen::Matrix<T, 12, 1> &getInertialParams() {
-                return m_inertialParameters;
+            SpatialInertia<T> &getSI() { return m_sI; }
+
+            template<typename Derived>
+            void setInertialParams(const Eigen::MatrixBase<Derived> &params) {
+                m_sI= params;
+            }
+            JointVariant<T> &getParentJoint() const { return *m_parentJoint_p; }
+            JointVariant<T> *getParentJointPtr() const { return m_parentJoint_p; }
+            Link<T> &getParentLink() const { return *m_parentLink_p; }
+
+            std::string const &getName() const { return m_name; }
+
+            bool operator==(const Link<T> &rhs) { return this->m_name == rhs.getName(); }
+            bool operator==(const std::string &rhs) { return this->m_name == rhs; }
+
+            template<typename Derived>
+            void updateParams(const Eigen::MatrixBase<Derived> &paramDot) {
+                m_sI+= paramDot;
             }
 
-            template <typename Derived> void setInertialParams(const Eigen::MatrixBase<Derived> &params) {
-                m_inertialParameters.template segment(0, params.size()) = params;
-                calculateSpatialInertia();
-            }
-
-            std::shared_ptr<Joint<T> > getJointGoingToChild(const std::string &child_link) {
-                return m_childJoints_sm[child_link];
-            }
-            std::shared_ptr<Joint<T> > getParentJoint() {
-                return m_parentJoint_sp;
-            }
-            std::shared_ptr<Link<T> > getParentLink() {
-                return m_parentLink_sp;
-            }
-
-            std::string const &getName() const {
-                return m_name;
-            }
-
-            bool operator ==(const Link<T> &rhs) {
-                return this->m_name == rhs.getName();
-            }
-            bool operator ==(const std::string &rhs) {
-                return this->m_name == rhs;
-            }
-
-            template <typename Derived> void updateParams(const Eigen::MatrixBase<Derived> &paramDot) {
-                m_inertialParameters.template segment(0, paramDot.size()) += paramDot;
-                calculateSpatialInertia();
-            }
-
-            bool isRoot() {
-                return m_isRoot;
-            }
-
-            const SpatialInertia<T> &getSpatialInertia() {
-                return m_spatialInertia;
-            }
+            bool isRoot() { return m_isRoot; }
+            
 
             /***************** COLLISION HANDLING *****************/
             /**
@@ -316,7 +446,7 @@ namespace ARDL {
              * @return std::string Filename if it exists otherwise returns an empty string
              */
             std::string getCollisionMeshFile() {
-                if (m_hasCollision) {
+                if(m_hasCollision) {
                     return m_collisionFiles[0];
                 } else {
                     return "";
@@ -324,53 +454,74 @@ namespace ARDL {
             }
 
             void updateCollision(const AdjointSE3<T> &at) {
-                if (m_hasCollision) {
-                    updateCollision_us(at);
-                }
+                if(m_hasCollision) { updateCollision_us(at); }
             }
             void updateCollision_us(const AdjointSE3<T> &at) {
                 m_collisionObject_sp->setTranslation(at.getP().template cast<T>());
                 m_collisionObject_sp->setRotation(at.getR().template cast<T>());
             }
-
-            bool hasCollision() {
-                return m_hasCollision;
+            void updateCollisionOptim(const AdjointSE3<T> &at) {
+                if(m_hasCollision) { updateCollisionOptim_us(at); }
+            }
+            void updateCollisionOptim_us(const AdjointSE3<T> &at) {
+                m_collisionObjectOptimal_sp->setTranslation(at.getP().template cast<T>());
+                m_collisionObjectOptimal_sp->setRotation(at.getR().template cast<T>());
             }
 
-            std::shared_ptr<fcl::CollisionObject<T> > getCollisionObjectPtr() {
-                return m_collisionObject_sp;
+            std::shared_ptr<fcl::CollisionObject<T>> getCollisionObjectPtr() { return m_collisionObject_sp; }
+            std::shared_ptr<fcl::CollisionObject<T>> getCollisionObjectOptimPtr() {
+                return m_collisionObjectOptimal_sp;
             }
 
-            Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> getCollisionVectors() {
-                Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> output;
-                int vertices = m_collisionModel_sp->num_vertices;
+            Eigen::Matrix<T, Eigen::Dynamic, 3> getCollisionVertices() {
+                Eigen::Matrix<T, Eigen::Dynamic, 3> output;
+                int vertices= m_collisionModel_sp->num_vertices;
                 output.resize(vertices, 3);
-                for (size_t i = 0; i < vertices; i++) {
-                    output.row(i) = m_collisionModel_sp->vertices[i].transpose();
-                }
+                for(size_t i= 0; i < vertices; i++) { output.row(i)= m_collisionModel_sp->vertices[i].transpose(); }
                 return output;
             }
 
-            std::vector<std::array<int, 3> > getCollisionTriangles() {
-                std::vector<std::array<int, 3> > output;
-                int vertices = m_collisionModel_sp->num_tris;
+            std::vector<std::array<int, 3>> getCollisionTriangles() {
+                std::vector<std::array<int, 3>> output;
+                int vertices= m_collisionModel_sp->num_tris;
                 output.resize(vertices);
-                for (size_t i = 0; i < vertices; i++) {
-                    output[i][0] = m_collisionModel_sp->tri_indices[i][0];
-                    output[i][1] = m_collisionModel_sp->tri_indices[i][1];
-                    output[i][2] = m_collisionModel_sp->tri_indices[i][2];
+                for(size_t i= 0; i < vertices; i++) {
+                    output[i][0]= m_collisionModel_sp->tri_indices[i][0];
+                    output[i][1]= m_collisionModel_sp->tri_indices[i][1];
+                    output[i][2]= m_collisionModel_sp->tri_indices[i][2];
                 }
                 return output;
             }
 
-            std::shared_ptr<fcl::BVHModel<fcl::OBB<T> > > getCollisionModel() {
-                return m_collisionModel_sp;
+            Eigen::Matrix<T, Eigen::Dynamic, 3> getCollisionVerticesOptim() {
+                Eigen::Matrix<T, Eigen::Dynamic, 3> output;
+                int vertices= m_collisionModelOptimal_sp->num_vertices;
+                output.resize(vertices, 3);
+                for(size_t i= 0; i < vertices; i++) {
+                    output.row(i)= m_collisionModelOptimal_sp->vertices[i].transpose();
+                }
+                return output;
             }
+
+            std::vector<std::array<int, 3>> getCollisionTrianglesOptim() {
+                std::vector<std::array<int, 3>> output;
+                int vertices= m_collisionModelOptimal_sp->num_tris;
+                output.resize(vertices);
+                for(size_t i= 0; i < vertices; i++) {
+                    output[i][0]= m_collisionModelOptimal_sp->tri_indices[i][0];
+                    output[i][1]= m_collisionModelOptimal_sp->tri_indices[i][1];
+                    output[i][2]= m_collisionModelOptimal_sp->tri_indices[i][2];
+                }
+                return output;
+            }
+
+            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>> getCollisionModel() { return m_collisionModel_sp; }
+
+            bool hasCollision() { return m_hasCollision; }
+
             /***************** END COLLISION HANDLING *****************/
 
-            urdf::LinkConstSharedPtr getUrdfLink() {
-                return urdfModel;
-            }
+            urdf::LinkConstSharedPtr getUrdfLink() const { return urdfModel; }
         };
-    }
-}
+    } // namespace Model
+} // namespace ARDL
