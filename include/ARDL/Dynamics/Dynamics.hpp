@@ -6,21 +6,23 @@
 #include "ARDL/Util/Math.hpp"
 #include "ARDL/Util/Filter.hpp"
 #include "ARDL/Dynamics/LinkRegressors.hpp"
+#include "ARDL/Util/MatrixInitializer.hpp"
 namespace ARDL {
     using namespace Model;
     using namespace Math;
     using namespace Util::Filters;
     using namespace Util::Math;
     using namespace Regressors;
-    template<typename T> class Dynamics {
-    private:
-        std::shared_ptr<Chain<T> > m_chain;
+    template<typename T>
+    class Dynamics {
+         private:
+        std::shared_ptr<Chain<T>> m_chain;
 
         Gravity<T> m_gravity, mt_gravity;
 
         LieBracketSE3<T> mt_bodyVelocity, mt_tempVelocity;
 
-        LinkRegressor<T> mt_momentumRegressor, mt_momentumRegressor2;
+        LinkRegressor<T> mt_momentumRegressor, mt_momentumRegressor2, mt_momentumRegressor3;
 
         size_t m_baseParamNo;
 
@@ -28,50 +30,97 @@ namespace ARDL {
 
         Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> mt_6xJ;
 
-        Eigen::Matrix<T, 6, 6>  mt_6x6_1, mt_6x6_2;
+        Eigen::Matrix<T, 6, 6> mt_6x6_1, mt_6x6_2, mt_6x6_3;
 
-    public:
-        Dynamics(const Dynamics<T> &copy, std::shared_ptr<Chain<T> > chain) {
-            m_chain = chain;
-            m_gravity = copy.m_gravity;
-            mt_gravity = copy.mt_gravity;
-            mt_bodyVelocity = copy.mt_bodyVelocity;
-            mt_tempVelocity = copy.mt_tempVelocity;
-            mt_momentumRegressor = copy.mt_momentumRegressor;
-            mt_momentumRegressor2 = copy.mt_momentumRegressor2;
-            m_baseParamNo = copy.m_baseParamNo;
-            m_projRegressor = copy.m_projRegressor;
-            m_projParameters = copy.m_projParameters;
-            mt_6xJ = copy.mt_6xJ;
-            mt_6x6_1 = copy.mt_6x6_1;
-            mt_6x6_2 = copy.mt_6x6_2;
+        SpatialInertia<T> mt_sI;
+        AdjointSE3<T> mt_accumulatorGlobal;
+
+         public:
+        /**
+         * @brief Construct a new Dynamics object by copying
+         *
+         * @param copy Dynamics to copy
+         * @param chain New chain to point to if neccessary
+         */
+        Dynamics(const Dynamics<T> &copy, std::shared_ptr<Chain<T>> chain) {
+            m_chain= chain;
+            m_gravity= copy.m_gravity;
+            mt_gravity= copy.mt_gravity;
+            mt_bodyVelocity= copy.mt_bodyVelocity;
+            mt_tempVelocity= copy.mt_tempVelocity;
+            mt_momentumRegressor= copy.mt_momentumRegressor;
+            mt_momentumRegressor2= copy.mt_momentumRegressor2;
+            mt_momentumRegressor3= copy.mt_momentumRegressor3;
+            m_baseParamNo= copy.m_baseParamNo;
+            m_projRegressor= copy.m_projRegressor;
+            m_projParameters= copy.m_projParameters;
+            mt_6xJ= copy.mt_6xJ;
+            mt_6x6_1= copy.mt_6x6_1;
+            mt_6x6_2= copy.mt_6x6_2;
         }
-        Dynamics(std::shared_ptr<Chain<T> > &chain, Gravity<T> &grav) {
-            this->m_chain = chain;
-            this->m_gravity = grav;
+
+        /**
+         * @brief Construct a new Dynamics object
+         *
+         * @param chain Robot Model (Chain)
+         * @param grav Global gravity vector in origin
+         */
+        Dynamics(std::shared_ptr<Chain<T>> &chain, Gravity<T> &grav) {
+            this->m_chain= chain;
+            this->m_gravity= grav;
             mt_6xJ.resize(6, this->m_chain->getNumOfJoints());
         }
 
-        Dynamics(std::shared_ptr<Chain<T> > &chain) {
-            this->m_chain = chain;
+        /**
+         * @brief Construct a new Dynamics object
+         *
+         * @param chain Robot Model (Chain)
+         */
+        Dynamics(std::shared_ptr<Chain<T>> &chain) {
+            this->m_chain= chain;
             this->m_gravity.setZero();
-            this->m_gravity(2) = 9.81;
+            this->m_gravity(2)= 9.81;
             mt_6xJ.resize(6, this->m_chain->getNumOfJoints());
         }
 
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-        std::shared_ptr<Chain<T> > &getChain() {
-            return m_chain;
-        }
+        /**
+         * @brief Get the Chain object
+         *
+         * @return std::shared_ptr<Chain<T>>& Pointer to robot model
+         */
+        std::shared_ptr<Chain<T>> &getChain() { return m_chain; }
 
         /**
-         * @brief Set acceleration due to gravity
+         * @brief Set global acceleration due to gravity
          *
-         * @param gravity
+         * @param gravity 6D vector of global gravity
          */
-        void setGravity(const Gravity<T> &gravity) {
-            this->m_gravity = gravity;
+        void setGravity(const Gravity<T> &gravity) { this->m_gravity= gravity; }
+
+        /**
+         * @brief Calculate the Joint Inertia matrix
+         *
+         * @tparam InertiaD Subtype of inertia matrix (allow for block)
+         * @param jacobians Aligned vector of jacobians
+         * @param M Inertia matrix
+         */
+        template<Frame OF= Frame::BODY, typename InertiaD>
+        void calcJointInertiaMatrix(const aligned_vector<AdjointSE3<T>> Ads,
+                                    const aligned_vector<Jacobian<T>> &jacobians,
+                                    Eigen::MatrixBase<InertiaD> const &M) {
+            size_t i= 0;
+            const_cast<Eigen::MatrixBase<InertiaD> &>(M).setZero();
+            for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                    mt_sI= link->getSI();
+                    if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(Ads[i]); }
+                    mt_6xJ.noalias()= mt_sI.calculateSpatialInertia() * jacobians[i];
+                    const_cast<Eigen::MatrixBase<InertiaD> &>(M).noalias()+= jacobians[i].transpose() * mt_6xJ;
+                    i++;
+                }
+            }
         }
 
         /**
@@ -81,14 +130,74 @@ namespace ARDL {
          * @param jacobians Aligned vector of jacobians
          * @param M Inertia matrix
          */
-        template<typename InertiaD> void calcJointInertiaMatrix(const aligned_vector<Jacobian<T> > &jacobians, Eigen::MatrixBase<InertiaD> const &M) {
-            size_t i = 0;
+        template<Frame OF= Frame::BODY, typename InertiaD>
+        void calcJointInertiaMatrixOptim(const aligned_vector<AdjointSE3<T>> Ads,
+                                         const aligned_vector<Jacobian<T>> &jacobians,
+                                         Eigen::MatrixBase<InertiaD> const &M) {
             const_cast<Eigen::MatrixBase<InertiaD> &>(M).setZero();
-            for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                    mt_6xJ.noalias() = link->getSpatialInertia() * jacobians[i];
-                    const_cast<Eigen::MatrixBase<InertiaD> &>(M).noalias() += jacobians[i].transpose() * mt_6xJ;
-                    i++;
+            for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
+                mt_sI= m_chain->getMoveableLinks()[i + 1]->getSI();
+                if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(Ads[i]); }
+                mt_6xJ.noalias()= mt_sI.calculateSpatialInertia() * jacobians[i];
+                const_cast<Eigen::MatrixBase<InertiaD> &>(M).noalias()+= jacobians[i].transpose() * mt_6xJ;
+            }
+        }
+
+        /**
+         * @brief Calculate Coriolis and centrifugal matrix
+         *
+         * @tparam Derived Subtype of output matrix
+         * @param jacobians Aligned Vector of jacobians
+         * @param jacobianDots Aligned vector of the derivative of the jacobians
+         * @param lbSE3 Lie Bracket for each joint
+         * @param C Output Coriolis and centrifugal matrix
+         */
+        template<Frame OF= Frame::BODY, typename Derived>
+        void calcCoriolisMatrix(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
+                                aligned_vector<LieBracketSE3<T>> &lbSE3, aligned_vector<AdjointSE3<T>> &Ads,
+                                Eigen::MatrixBase<Derived> const &C) {
+            const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
+            size_t i= 0;
+            for(Link<T> &link: m_chain->getLinksRef()) {
+                // if constexpr(OF == Frame::SPATIAL) {
+                //     if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                //         mt_sI= link->getSI();
+                //         mt_accumulatorGlobal= Ads[i];
+                //         mt_accumulatorGlobal.inverse();
+                //         const Eigen::Matrix<T, 6, 6> &invAd= mt_accumulatorGlobal.getMatrix();
+                //         Ads[i].applyInverse(lbSE3[i].getVelocity(), mt_tempVelocity.getVelocity());
+                //         mt_tempVelocity.calcMatrix();
+                //         mt_6x6_1.noalias()= mt_sI.calculateSpatialInertia() * mt_tempVelocity.getMatrix();
+                //         mt_6x6_2.noalias()= mt_6x6_1 - mt_6x6_1.transpose();
+                //         mt_6x6_2*= invAd;
+                //         mt_6x6_1.noalias()= invAd.transpose() * mt_6x6_2;
+                //         mt_sI.applyInverseXIX(Ads[i]);
+                //         mt_6xJ.noalias()= mt_6x6_1 * jacobians[i];
+                //         mt_6xJ.noalias()+= mt_sI.calculateSpatialInertia() * jacobianDots[i];
+
+                //         const_cast<Eigen::MatrixBase<Derived> &>(C).noalias()+= jacobians[i].transpose() * mt_6xJ;
+                //         i++;
+                //     }
+                // } else 
+                if constexpr(OF == Frame::BODY) {
+                    if(!link.isRoot() && !ARDL_visit(link.getParentJoint(), isFixed())) {
+                        lbSE3[i].applyTranspose(link.getSI(), mt_6x6_1);
+                        mt_6x6_2.setZero();
+                        mt_6x6_2.noalias()= mt_6x6_1.transpose() - mt_6x6_1;
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).setZero();
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()=
+                            mt_6x6_2 * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
+
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()+=
+                            link.getSI().calculateSpatialInertia() *
+                            jacobianDots[i].template block<6, -1>(0, 0, 6, i + 1);
+
+                        const_cast<Eigen::MatrixBase<Derived> &>(C)
+                            .template block<-1, -1>(0, 0, i + 1, i + 1)
+                            .noalias()+= jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                                         mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
+                        i++;
+                    }
                 }
             }
         }
@@ -102,17 +211,58 @@ namespace ARDL {
          * @param lbSE3 Lie Bracket for each joint
          * @param C Output Coriolis and centrifugal matrix
          */
-        template<typename Derived> void calcCoriolisMatrix(aligned_vector<Jacobian<T> > &jacobians, aligned_vector<Jacobian<T> > &jacobianDots, aligned_vector<LieBracketSE3<T> > &lbSE3, Eigen::MatrixBase<Derived> const &C) {
+        template<Frame OF= Frame::BODY, typename Derived>
+        void calcCoriolisMatrixOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
+                                     aligned_vector<LieBracketSE3<T>> &lbSE3, aligned_vector<AdjointSE3<T>> &Ads,
+                                     Eigen::MatrixBase<Derived> const &C) {
             const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
-            size_t i = 0;
-            for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                    mt_6x6_1.noalias() = link->getSpatialInertia() * lbSE3[i].getMatrix();
-                    mt_6x6_2.noalias() = mt_6x6_1 - mt_6x6_1.transpose();
-                    mt_6xJ.noalias() = mt_6x6_2 * jacobians[i];
-                    mt_6xJ.noalias() += link->getSpatialInertia() * jacobianDots[i];
+            for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
+                if constexpr(OF == Frame::BODY) {
+                    lbSE3[i].applyTranspose(m_chain->getMoveableLinks()[i + 1]->getSI(), mt_6x6_1);
+                    mt_6x6_2.setZero();
+                    mt_6x6_2.noalias()= mt_6x6_1.transpose() - mt_6x6_1;
+                    mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).setZero();
+                    mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()=
+                        mt_6x6_2 * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
 
-                    const_cast<Eigen::MatrixBase<Derived> & >(C).noalias() += jacobians[i].transpose() * mt_6xJ;
+                    mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()+=
+                        m_chain->getMoveableLinks()[i + 1]->getSI().calculateSpatialInertia() *
+                        jacobianDots[i].template block<6, -1>(0, 0, 6, i + 1);
+
+                    const_cast<Eigen::MatrixBase<Derived> &>(C).template block<-1, -1>(0, 0, i + 1, i + 1).noalias()+=
+                        jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
+                }
+            }
+        }
+
+        /**
+         * @brief Calculate Gravity vector
+         *
+         * @tparam Derived Subtype of gravity vector
+         * @param jacobians aligned vector of jacobians
+         * @param Ads aligned vector of Adjoint transforms
+         * @param G Output gravity vector
+         */
+        template<Frame OF= Frame::BODY, typename Derived>
+        void calcGravityVector(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<AdjointSE3<T>> &Ads,
+                               Eigen::MatrixBase<Derived> const &G) {
+            const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
+            size_t i= 0;
+            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                    mt_sI= link->getSI();
+                    if constexpr(OF == Frame::SPATIAL) {
+                        mt_sI.applyInverseXIX(Ads[i]);
+                        mt_gravity= m_gravity;
+                        mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
+                    } else if constexpr(OF == Frame::BODY) {
+                        Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
+                        mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
+                    }
+                    const_cast<MatrixBase<Derived> &>(G).head(i + 1).noalias()+=
+                        jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_gravity;
                     i++;
                 }
             }
@@ -126,305 +276,544 @@ namespace ARDL {
          * @param Ads aligned vector of Adjoint transforms
          * @param G Output gravity vector
          */
-        template<typename Derived> void calcGravityVector(aligned_vector<Jacobian<T> > &jacobians, aligned_vector<AdjointSE3<T> > &Ads, Eigen::MatrixBase<Derived> const &G) {
-            const_cast<Eigen::MatrixBase<Derived> & >(G).setZero();
-            size_t i = 0;
-            for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                    Ads[i].applyInverse(m_gravity, mt_gravity);
-                    mt_6x6_1.col(0).noalias() = link->getSpatialInertia() * mt_gravity;
-                    const_cast<Eigen::MatrixBase<Derived> & >(G).noalias() += jacobians[i].transpose() * mt_6x6_1.col(0);
-                    i++;
+        template<Frame OF= Frame::BODY, typename Derived>
+        void calcGravityVectorOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<AdjointSE3<T>> &Ads,
+                                    Eigen::MatrixBase<Derived> const &G) {
+            const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
+            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
+                mt_sI= m_chain->getMoveableLinksRef()[i + 1]->getSI();
+                if constexpr(OF == Frame::SPATIAL) {
+                    mt_sI.applyInverseXIX(Ads[i + 1]);
+                    mt_gravity= m_gravity;
+                    mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
+                } else if constexpr(OF == Frame::BODY) {
+                    Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
+                    mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
                 }
+                const_cast<MatrixBase<Derived> &>(G).head(i + 1).noalias()+=
+                    jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_gravity;
+                // i++;
             }
         }
 
-        template<typename Derived> void calcFrictionVector(Eigen::MatrixBase<Derived> const &F, const T eps = T(1e-30)) {
-            const_cast<Eigen::MatrixBase<Derived> & >(F).setZero();
-            size_t i = 0;
-            for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                    const_cast<Eigen::MatrixBase<Derived> & >(F)(i) = link->getInertialParams()[10] * m_chain->getQd()(i) + link->getInertialParams()[11] * sgn(m_chain->getQd()(i), eps);
-                    i++;
-                }
-            }
-        }
-
-        template<typename RegressorD, typename JointD> void calcSlotineLiRegressor(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<LieBracketSE3<T> > &lbSE3, const aligned_vector<AdjointSE3<T> > &Ads, const Eigen::MatrixBase<JointD> &qd, const Eigen::MatrixBase<JointD> &qdd, Eigen::MatrixBase<RegressorD> const &out, const T eps = T(1e-30)) {
-            const_cast<Eigen::MatrixBase<RegressorD> & >(out).setZero();
-            size_t regressorCols = out.cols() / m_chain->getNumOfJoints();
-            for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
-                mt_bodyVelocity.getVelocity().setZero();
-                Ads[i].applyInverse(m_gravity, mt_bodyVelocity.getVelocity());
-                mt_bodyVelocity.getVelocity().noalias() += jacobians[i] * qdd;
-                mt_6x6_1.col(0).noalias() = jacobians[i] * qd;
-                mt_bodyVelocity.getVelocity().noalias() += lbSE3[i].getMatrix() * mt_6x6_1.col(0);
-                mt_bodyVelocity.getVelocity().noalias() += jacobianDots[i] * qd;
+        template<Frame OF= Frame::BODY, typename RD, typename JD>
+        void calcRegressor(const Eigen::MatrixBase<JD> &qdd, const aligned_vector<AdjointSE3<T>> &Ads,
+                           aligned_vector<LieBracketSE3<T>> &adjs, const aligned_vector<Jacobian<T>> &jacs,
+                           const aligned_vector<Jacobian<T>> &jDs, Eigen::MatrixBase<RD> const &out) {
+            static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
+            Matrix<T, 6, 1> mt_gravity;
+            LieBracketSE3<T> mt_bodyVelocity;
+            LinkRegressor<T> mt_momentumRegressor, mt_momentumRegressor2;
+            mt_momentumRegressor.setZero();
+            mt_momentumRegressor2.setZero();
+            Eigen::Matrix<T, 6, 2> mt_6x6_1;
+            VectorX<T> qd= m_chain->getQd();
+            Ads[0].apply(m_gravity, mt_gravity);
+            for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
+                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.template head(i + 1);
+                mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.template head(i + 1);
+                adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1), mt_6x6_1.col(1));
+                mt_bodyVelocity+= mt_6x6_1.col(1);
+                mt_bodyVelocity+= jDs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.template head(i + 1);
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                momentumRegressor(jacobians[i] * qd, mt_momentumRegressor2);
-                mt_momentumRegressor.noalias() -= lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2;
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10).noalias() = jacobians[i].transpose() * mt_momentumRegressor;
-                if (regressorCols == 12) {
-                    //limit creates a deadzone for qd around 0 (might help with qd noise)
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 10) = deadzone(m_chain->getQd()(i), eps) * m_chain->getQd()(i);
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 11) = sgn(m_chain->getQd()(i), eps);
-                }
+                momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
+                adjs[i].calcMatrix();
+                mt_momentumRegressor.noalias()-= adjs[i].getMatrix().transpose() * mt_momentumRegressor2;
+                const_cast<Eigen::MatrixBase<RD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()=
+                    jacs[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
             }
         }
 
-        template<typename RegressorD, typename JointD> void initFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<LieBracketSE3<T> > &lbSE3, const aligned_vector<AdjointSE3<T> > &Ads, const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter, Eigen::MatrixBase<RegressorD> const &out, const T eps = T(1e-30)) {
-            const_cast<Eigen::MatrixBase<RegressorD> & >(out).setZero();
-            size_t regressorCols = out.cols() / m_chain->getNumOfJoints();
-            for (int i = 0; i < m_chain->getNumOfJoints(); i++) {
-                mt_bodyVelocity.getVelocity().setZero();
-                Ads[i].applyInverse(m_gravity, mt_bodyVelocity.getVelocity());
-                mt_bodyVelocity.getVelocity() = (filter.getBeta() * jacobians[i] * qd - lbSE3[i].getMatrix() * jacobians[i] * qd) - mt_bodyVelocity.getVelocity();
+        template<Frame OF= Frame::BODY, typename RD, typename JD, typename JD2>
+        void calcSlotineLiRegressor(const Eigen::MatrixBase<JD> &qd, const Eigen::MatrixBase<JD2> &qdd,
+                                    const aligned_vector<AdjointSE3<T>> &Ads, aligned_vector<LieBracketSE3<T>> &adjs,
+                                    const aligned_vector<Jacobian<T>> &jacs, const aligned_vector<Jacobian<T>> &jDs,
+                                    Eigen::MatrixBase<RD> const &out) {
+            static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
+            Eigen::Matrix<T, 6, 1> mt_gravity;
+            LieBracketSE3<T> mt_bodyVelocity;
+            Eigen::Matrix<T, 6, 10> mt_momentumRegressor, mt_momentumRegressor2, mt_momentumRegressor3;
+            mt_momentumRegressor.setZero();
+            mt_momentumRegressor2.setZero();
+            Eigen::Matrix<T, 6, 2> mt_6x6_1;
+            Ads[0].apply(m_gravity, mt_gravity);
+            for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
+                Ads[i+1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
+                mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1), mt_6x6_1.col(1));
+                mt_bodyVelocity+= mt_6x6_1.col(1);
+                mt_bodyVelocity+= jDs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                momentumRegressor(jacobians[i] * qd, mt_momentumRegressor2);
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * (mt_momentumRegressor + lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2);
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) += jacobianDots.at(i).transpose() * mt_momentumRegressor2;
-                if (regressorCols == 12) {
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 10) = -deadzone(m_chain->getQd()(i), eps) * m_chain->getQd()(i);
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 11) = -sgn(m_chain->getQd()(i), eps);
-                }
+                momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
+                // adjs[i].applyTransposeTo(mt_momentumRegressor2, mt_momentumRegressor3);
+                adjs[i].calcMatrix();
+                mt_momentumRegressor3 = adjs[i].getMatrix().transpose()*mt_momentumRegressor2;
+                mt_momentumRegressor.noalias()-= mt_momentumRegressor3;
+                const_cast<Eigen::MatrixBase<RD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()=
+                    jacs[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
+            }
+        }
+
+        template<typename RegressorD, typename JointD>
+        void initFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
+                                            const aligned_vector<Jacobian<T>> &jacobianDots,
+                                            const aligned_vector<LieBracketSE3<T>> &lbSE3,
+                                            const aligned_vector<AdjointSE3<T>> &Ads,
+                                            const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
+                                            Eigen::MatrixBase<RegressorD> const &out) {
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
+
+            Ads[0].apply(m_gravity, mt_gravity);
+            for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
+                mt_bodyVelocity.getVelocity().setZero();
+                Ads[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
+
+                mt_bodyVelocity= (filter.getBeta() * jacobians[i] * qd);
+                mt_bodyVelocity-= mt_6x6_1.col(0);
+
+                mt_6x6_1.col(0).noalias()= jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                lbSE3[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
+                mt_bodyVelocity-= mt_6x6_1.col(1);
+
+                momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
+
+                momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
+
+                mt_momentumRegressor.noalias()+= lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2;
+
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
+                    jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
+
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)+=
+                    jacobianDots[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor2;
             }
             filter.setBuffer(out);
-            const_cast<Eigen::MatrixBase<RegressorD> & >(out).setZero();
-            for (int i = 0; i < m_chain->getNumOfJoints(); i++) {
-                mt_bodyVelocity.getVelocity().setZero();
-                mt_bodyVelocity.getVelocity() = filter.getBeta() * jacobians[i] * qd;
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
+            for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
+                // mt_bodyVelocity.getVelocity().setZero();
+                mt_bodyVelocity= filter.getBeta() * jacobians[i] * qd;
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
 
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * (mt_momentumRegressor);
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
+                    jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
             }
-            const_cast<Eigen::MatrixBase<RegressorD> &>(out) -= (filter.getResult());
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out)-= (filter.getResult());
         }
 
-        template<typename RegressorD, typename JointD> void computeFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<LieBracketSE3<T> > &lbSE3, const aligned_vector<AdjointSE3<T> > &Ads, const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter, Eigen::MatrixBase<RegressorD> const &out, const T eps = T(1e-30)) {
-            const_cast<Eigen::MatrixBase<RegressorD> & >(out).setZero();
-            size_t regressorCols = out.cols() / m_chain->getNumOfJoints();
-            for (int i = 0; i < m_chain->getNumOfJoints(); i++) {
-                mt_bodyVelocity.getVelocity().setZero();
-                Ads[i].applyInverse(m_gravity, mt_bodyVelocity.getVelocity());
-                mt_bodyVelocity.getVelocity() = (filter.getBeta() * jacobians[i] * qd - lbSE3[i].getMatrix() * jacobians[i] * qd) - mt_bodyVelocity.getVelocity();
+        template<typename RegressorD, typename JointD>
+        void computeFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
+                                               const aligned_vector<Jacobian<T>> &jacobianDots,
+                                               const aligned_vector<LieBracketSE3<T>> &lbSE3,
+                                               const aligned_vector<AdjointSE3<T>> &Ads,
+                                               const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
+                                               Eigen::MatrixBase<RegressorD> const &out) {
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
+
+            Ads[0].apply(m_gravity, mt_gravity);
+            for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
+                // mt_bodyVelocity.getVelocity().setZero();
+                Ads[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
+
+                mt_bodyVelocity= (filter.getBeta() * jacobians[i] * qd);
+                mt_bodyVelocity-= mt_6x6_1.col(0);
+
+                mt_6x6_1.col(0).noalias()= jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                lbSE3[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
+                mt_bodyVelocity-= mt_6x6_1.col(1);
+
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                momentumRegressor(jacobians[i] * qd, mt_momentumRegressor2);
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * (mt_momentumRegressor + lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2);
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) += jacobianDots[i].transpose() * mt_momentumRegressor2;
-                if (regressorCols == 12) {
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 10) = -deadzone(m_chain->getQd()(i), eps) * m_chain->getQd()(i);
-                    const_cast<Eigen::MatrixBase<RegressorD> &>(out)(i, regressorCols *i + 11) = -sgn(m_chain->getQd()(i), eps);
-                }
+
+                momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
+
+                mt_momentumRegressor.noalias()+= lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2;
+
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
+                    jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
+
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)+=
+                    jacobianDots[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor2;
             }
             filter.compute(out);
-            const_cast<Eigen::MatrixBase<RegressorD> & >(out).setZero();
-            for (int i = 0; i < m_chain->getNumOfJoints(); i++) {
-                mt_bodyVelocity.getVelocity().setZero();
-                mt_bodyVelocity.getVelocity() = filter.getBeta() * jacobians[i] * qd;
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
+            for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
+                // mt_bodyVelocity.getVelocity().setZero();
+                mt_bodyVelocity= filter.getBeta() * jacobians[i] * qd;
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                const_cast<Eigen::MatrixBase<RegressorD> & >(out).block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * (mt_momentumRegressor);
+
+                const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
+                    jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
             }
-            const_cast<Eigen::MatrixBase<RegressorD> &>(out) -= (filter.getResult());
+            const_cast<Eigen::MatrixBase<RegressorD> &>(out)-= (filter.getResult());
         }
 
-        void calcBaseProjection(size_t random_samples, T qddLimit = 1, T threshold = T(1e-4), T eps = T(1e-30)) {
-            Eigen::Matrix < T, Eigen::Dynamic, Eigen::Dynamic> regressors(random_samples * m_chain->getNumOfJoints(), 12 * m_chain->getNumOfJoints());
-            Eigen::Matrix < T, Eigen::Dynamic, Eigen::Dynamic> R(12 * m_chain->getNumOfJoints(), 12 * m_chain->getNumOfJoints());
+        void calcBaseProjection(size_t random_samples, T qddLimit= 1, T threshold= T(1e-8)) {
+            // Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> regressors(random_samples * m_chain->getNumOfJoints(),
+            //                                                             10 * m_chain->getNumOfJoints());
+            Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> R(10 * m_chain->getNumOfJoints(),
+                                                               10 * m_chain->getNumOfJoints());
             ForwardKinematics<T> fk(m_chain);
-            aligned_vector<AdjointSE3<T> > Ads(m_chain->getNumOfJoints());
-            aligned_vector<LieBracketSE3<T> > lbSE3(m_chain->getNumOfJoints());
-            aligned_vector<Eigen::Matrix<T, 6, Eigen::Dynamic> > jacobians, jacobianDots;
-            jacobians.resize(m_chain->getNumOfJoints());
-            jacobianDots.resize(m_chain->getNumOfJoints());
-            for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
-                jacobians.at(i).resize(6, m_chain->getNumOfJoints());
-                jacobians.at(i).setZero();
-                jacobianDots.at(i).resize(6, m_chain->getNumOfJoints());
-                jacobianDots.at(i).setZero();
-            }
-            Eigen::Matrix<T, Eigen::Dynamic, 1> qd, qdd;
+            aligned_vector<AdjointSE3<T>> Ads(m_chain->getNumOfJoints() + 1);
+            aligned_vector<LieBracketSE3<T>> lbSE3(m_chain->getNumOfJoints());
+            aligned_vector<Jacobian<T>> jacobians, jacobianDots;
+
+            Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> regressors(m_chain->getNumOfJoints(),
+                                                                        10 * m_chain->getNumOfJoints());
+            
+
+            ARDL::Util::init(jacobians, m_chain->getNumOfJoints());
+            ARDL::Util::init(jacobianDots, m_chain->getNumOfJoints());
+
+            VectorX<T> qd, qdd;
             qd.resize(m_chain->getNumOfJoints());
             qdd.resize(m_chain->getNumOfJoints());
             R.setZero();
             // CREATE RANDOM REGRESSOR STACK
-            for (size_t k = 0; k < random_samples; k++) {
+            for(size_t k= 0; k < random_samples; k++) {
                 m_chain->random();
-                fk.getAdjoints(Ads);
-                fk.getBodyJacobian(jacobians, jacobianDots);
-                qd = m_chain->getQd();
-                qdd = Eigen::Matrix<T, Eigen::Dynamic, 1>::Random(m_chain->getNumOfJoints());
-                qdd *= qddLimit;
+                qd= m_chain->getQd();
+                qdd.setRandom() * qddLimit;
+                m_chain->updateMatricesOptim();
+                fk.getBodyAdjointsOptim(Ads);
+                fk.template getJacobians<ARDL::Frame::BODY>(Ads, jacobians);
                 fk.getLieBrackets(lbSE3, jacobians);
-                this->calcSlotineLiRegressor(jacobians, jacobianDots, lbSE3, Ads, qd, qdd, regressors.block(k * m_chain->getNumOfJoints(), 0, m_chain->getNumOfJoints(), 12 * m_chain->getNumOfJoints()), eps);
-                R += regressors.block(k * m_chain->getNumOfJoints(), 0, m_chain->getNumOfJoints(), 12 * m_chain->getNumOfJoints()).transpose() * regressors.block(k * m_chain->getNumOfJoints(), 0, m_chain->getNumOfJoints(), 12 * m_chain->getNumOfJoints());
-                // std::cout << R << std::endl;
+                fk.template getJacobianDots<ARDL::Frame::BODY>(Ads, lbSE3, jacobians, jacobianDots);
+                this->calcSlotineLiRegressor<ARDL::Frame::BODY>(qd, qdd, Ads, lbSE3, jacobians, jacobianDots,
+                                                                regressors);
+
+                R+= regressors.transpose() *
+                    regressors;
             }
-            Eigen::ColPivHouseholderQR < Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> > qr(R);
+            Eigen::ColPivHouseholderQR<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>> qr(R);
             qr.setThreshold(threshold);
             qr.compute(R);
 
-            Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> Q(m_chain->getNumOfJoints() * 12, m_chain->getNumOfJoints() * 12);
+            Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> Q(m_chain->getNumOfJoints() * 10,
+                                                               m_chain->getNumOfJoints() * 10);
             Q.setZero();
-            Q = qr.householderQ();
+            Q= qr.householderQ();
 
-            Eigen::Matrix<T, -1, -1> RQ(m_chain->getNumOfJoints() * 12, m_chain->getNumOfJoints() * 12);
+            Eigen::Matrix<T, -1, -1> RQ(m_chain->getNumOfJoints() * 10, m_chain->getNumOfJoints() * 10);
             RQ.setZero();
-            RQ = qr.matrixR();
+            RQ= qr.matrixR();
 
-            Eigen::Matrix<T, -1, -1> PQ(m_chain->getNumOfJoints() * 12, m_chain->getNumOfJoints() * 12);
+            Eigen::Matrix<T, -1, -1> PQ(m_chain->getNumOfJoints() * 10, m_chain->getNumOfJoints() * 10);
             PQ.setZero();
-            PQ = qr.colsPermutation();
+            PQ= qr.colsPermutation();
 
-            m_baseParamNo = qr.rank();
+            m_baseParamNo= qr.rank();
+            //Pb
+            m_projRegressor= PQ.block(0, 0, PQ.rows(), m_baseParamNo);
+            
+            //R1^{-1}*R2
+            m_projParameters= RQ.block(0, 0, m_baseParamNo, m_baseParamNo).inverse() *
+                              RQ.block(0, m_baseParamNo, m_baseParamNo, RQ.cols() - m_baseParamNo);
 
-            m_projRegressor = PQ.block(0, 0, PQ.rows(), m_baseParamNo);
+            m_projParameters=
+                (m_projParameters.array().abs() >threshold).matrix().template cast<T>().cwiseProduct(m_projParameters);
 
-            m_projParameters = RQ.block(0, 0, m_baseParamNo, m_baseParamNo).inverse() * RQ.block(0, m_baseParamNo, m_baseParamNo, RQ.cols() - m_baseParamNo);
-
-            m_projParameters = (m_projParameters.array().abs() > 1e-4).matrix().template cast<T>().cwiseProduct(m_projParameters);
-
-            m_projParameters = m_projRegressor.transpose() + m_projParameters * PQ.block(0, m_baseParamNo, PQ.rows(), PQ.cols() - m_baseParamNo).transpose();
+            m_projParameters=
+                m_projRegressor.transpose() +
+                m_projParameters * PQ.block(0, m_baseParamNo, PQ.rows(), PQ.cols() - m_baseParamNo).transpose();
+        
+            m_projRegressor = m_projParameters.transpose()*(m_projParameters*m_projParameters.transpose()).inverse();
         }
 
-        const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getRegressorProjector() {
-            return m_projRegressor;
-        }
-        const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getParameterProjector() {
-            return m_projParameters;
-        }
-        const size_t &getNumOfBaseParams() {
-            return m_baseParamNo;
-        }
+        const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getRegressorProjector() { return m_projRegressor; }
+        const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getParameterProjector() { return m_projParameters; }
+        const size_t &getNumOfBaseParams() { return m_baseParamNo; }
 
-        template<int j> void calcJointInertiaMatrixDq(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, aligned_vector<Eigen::Matrix<T, j, j> > &M) {
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                size_t i = 0;
+        template<Frame OF= Frame::BODY>
+        void calcJointInertiaMatrixDq(const aligned_vector<AdjointSE3<T>> Ads,
+                                      const aligned_vector<Jacobian<T>> &jacobians,
+                                      const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
+                                      aligned_vector<MatrixX<T>> &M) {
+            for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
+                static_assert(OF == Frame::BODY, "Only BODY Frame has been implemented currently");
+                size_t i= 0;
                 M[i1].setZero();
-                for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                    if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                        M[i1] += jacobiansDq[i][i1].transpose() * link->getSpatialInertia() * jacobians[i] + jacobians[i].transpose() * link->getSpatialInertia() * jacobiansDq[i][i1];
+                for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                    if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                        mt_sI= link->getSI();
+                        mt_sI.applyOut(jacobians[i].template block<6, Dynamic>(0, 0, 6, i + 1),
+                                       mt_6xJ.template block<6, Dynamic>(0, 0, 6, i + 1));
+                        M[i1].template block<Dynamic, Dynamic>(0, 0, i + 1, i + 1).noalias()+=
+                            jacobiansDq[i1][i].template block<6, Dynamic>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, Dynamic>(0, 0, 6, i + 1);
+                        mt_sI.applyOut(jacobiansDq[i1][i].template block<6, Dynamic>(0, 0, 6, i + 1),
+                                       mt_6xJ.template block<6, Dynamic>(0, 0, 6, i + 1));
+                        M[i1].template block<Dynamic, Dynamic>(0, 0, i + 1, i + 1).noalias()+=
+                            jacobians[i].template block<6, Dynamic>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, Dynamic>(0, 0, 6, i + 1);
+                        i++;
+                    }
+                }
+            }
+        }
+        // TODO optimize
+        template<Frame OF= Frame::BODY>
+        void calcCoriolisMatrixDq(aligned_vector<LieBracketSE3<T>> &lbSE3, const aligned_vector<Jacobian<T>> &jacobians,
+                                  aligned_vector<Jacobian<T>> &jacobianDots,
+                                  const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
+                                  const aligned_vector<aligned_vector<Jacobian<T>>> &jacobianDotsDq,
+                                  aligned_vector<Eigen::Matrix<T, -1, -1>> &C) {
+            for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
+                size_t i= 0;
+                C[i1].setZero();
+                for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                    if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                        lbSE3[i].calcMatrix();
+                        mt_6x6_1= lbSE3[i].getMatrix();
+                        link->getSI().apply(mt_6x6_1, mt_6x6_2);
+                        lbSE3[i].applyTranspose(link->getSI(), mt_6x6_2);
+
+                        mt_6x6_1-= mt_6x6_2;
+
+                        link->getSI().applyOut(jacobianDots[i].template block<6, -1>(0, 0, 6, i + 1),
+                                               mt_6xJ.template block<6, -1>(0, 0, 6, i + 1));
+
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()+=
+                            mt_6x6_1 * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
+                        C[i1].template block<-1, -1>(0, 0, i + 1, i + 1).noalias()+=
+                            jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
+
+                        link->getSI().applyOut(jacobianDotsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1),
+                                               mt_6xJ.template block<6, -1>(0, 0, 6, i + 1));
+
+                        C[i1].template block<-1, -1>(0, 0, i + 1, i + 1).noalias()+=
+                            jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
+
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1)=
+                            mt_6x6_1 * jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1);
+
+                        mt_bodyVelocity=
+                            jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) * m_chain->getQd().head(i + 1);
+                        mt_bodyVelocity.calcMatrix();
+                        mt_6x6_1= mt_bodyVelocity.getMatrix();
+                        link->getSI().apply(mt_6x6_1, mt_6x6_2);
+                        mt_bodyVelocity.applyTranspose(link->getSI(), mt_6x6_2);
+
+                        mt_6x6_1-= mt_6x6_2;
+
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()+=
+                            mt_6x6_1 * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
+                        C[i1].template block<-1, -1>(0, 0, i + 1, i + 1).noalias()+=
+                            jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
+
                         i++;
                     }
                 }
             }
         }
 
-        template<int j> void calcCoriolisMatrixDq(const aligned_vector<LieBracketSE3<T> > &lbSE3, const aligned_vector<Jacobian<T> > &jacobians, aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobianDotsDq, aligned_vector<Eigen::Matrix<T, j, j> > &C) {
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                size_t i = 0;
-                for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                    if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                        mt_bodyVelocity.setVelocity(jacobiansDq[i][i1] * m_chain->getQd());
-
-                        // (link->getSpatialInertia() * lbSE3[i].getMatrix() - lbSE3[i].getMatrix().transpose() * link->getSpatialInertia())
-
-                        C[i1] += jacobiansDq[i][i1].transpose() * ((link->getSpatialInertia() * lbSE3[i].getMatrix() - lbSE3[i].getMatrix().transpose() * link->getSpatialInertia()) * jacobians[i] + link->getSpatialInertia() * jacobianDots[i]) + jacobians[i].transpose() * link->getSpatialInertia() * jacobianDotsDq[i][i1] + jacobians[i].transpose() * ((link->getSpatialInertia() * mt_bodyVelocity.getMatrix() - mt_bodyVelocity.getMatrix().transpose() * link->getSpatialInertia()) * jacobians[i] + (link->getSpatialInertia() * lbSE3[i].getMatrix() - lbSE3[i].getMatrix().transpose() * link->getSpatialInertia()) * jacobiansDq[i][i1]);
-
-                        //jacobians[i].transpose() * ((link->getSpatialInertia() * adjuncts[i].getMatrix() - adjuncts[i].getMatrix().transpose() * link->getSpatialInertia()) * jacobians[i] + link->getSpatialInertia() * jacobianDots[i]);
-                        i++;
-                    }
-                }
-            }
-        }
-
-        template<int j> void calcCoriolisMatrixDqd(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, aligned_vector<Eigen::Matrix<T, j, j> > &C) {
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                size_t i = 0;
-                for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                    if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
+        template<Frame OF= Frame::BODY, int j>
+        void calcCoriolisMatrixDqd(const aligned_vector<Jacobian<T>> &jacobians,
+                                   const aligned_vector<Jacobian<T>> &jacobianDots,
+                                   const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
+                                   aligned_vector<Eigen::Matrix<T, j, j>> &C) {
+            for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
+                size_t i= 0;
+                C[i1].setZero();
+                for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                    if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
                         mt_bodyVelocity.setVelocity(jacobians[i].col(i1));
+                        mt_bodyVelocity.calcMatrix();
+                        mt_6x6_1= mt_bodyVelocity.getMatrix();
+                        link->getSI().apply(mt_6x6_1, mt_6x6_2);
+                        mt_bodyVelocity.applyTranspose(link->getSI(), mt_6x6_2);
 
-                        // (link->getSpatialInertia() * lbSE3[i].getMatrix() - lbSE3[i].getMatrix().transpose() * link->getSpatialInertia())
+                        mt_6x6_1-= mt_6x6_2;
 
-                        C[i1] += jacobians[i].transpose() * ((link->getSpatialInertia() * mt_bodyVelocity.getMatrix() - mt_bodyVelocity.getMatrix().transpose() * link->getSpatialInertia()) * jacobians[i] + link->getSpatialInertia() * jacobiansDq[i][i1]);
+                        link->getSI().applyOut(jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1),
+                                               mt_6xJ.template block<6, -1>(0, 0, 6, i + 1));
 
-                        //jacobians[i].transpose() * ((link->getSpatialInertia() * adjuncts[i].getMatrix() - adjuncts[i].getMatrix().transpose() * link->getSpatialInertia()) * jacobians[i] + link->getSpatialInertia() * jacobianDots[i]);
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()+=
+                            mt_6x6_1 * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
+
+                        C[i1].template block<-1, -1>(0, 0, i + 1, i + 1)+=
+                            jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                            mt_6xJ.template block<6, -1>(0, 0, 6, i + 1);
                         i++;
                     }
                 }
             }
         }
 
-        template<int j> void calcGravityVectorDq(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, const aligned_vector<AdjointSE3<T> > &Ads, aligned_vector<Eigen::Matrix<T, j, 1> > &G) {
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                G[i1].setZero();
-                size_t i = 0;
-                for (std::shared_ptr<Link<T> > &link: m_chain->getLinksRef()) {
-                    if (!link->isRoot() && !link->getParentJoint()->isFixed()) {
-                        Ads[i].applyInverse(m_gravity, mt_gravity);
+        template<Frame OF= Frame::BODY, int j>
+        void calcGravityVectorDq(const aligned_vector<AdjointSE3<T>> Ads, const aligned_vector<Jacobian<T>> &jacobians,
+                                 const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
+                                 aligned_vector<Eigen::Matrix<T, j, 1>> &G) {
+            for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) { G[i1].setZero(); }
+            size_t i= 0;
+            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
+                if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
+                    mt_sI= link->getSI();
+                    if constexpr(OF == Frame::BODY) { Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity); }
+                    for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
                         mt_bodyVelocity.setVelocity(jacobians[i].col(i1));
-                        G[i1] += (jacobiansDq[i][i1].transpose() * link->getSpatialInertia() - jacobians[i].transpose() * link->getSpatialInertia() * mt_bodyVelocity.getMatrix()) * mt_gravity;
-                        i++;
+                        mt_6x6_2= mt_bodyVelocity.getMatrix();
+                        link->getSI().apply(mt_6x6_2, mt_6x6_3);
+
+                        link->getSI().applyOut(jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1),
+                                               mt_6xJ.template block<6, -1>(0, 0, 6, i + 1));
+
+                        mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).noalias()-=
+                            mt_6x6_2.transpose() * jacobians[i].template block<6, -1>(0, 0, 6, i + 1);
+                        G[i1].head(i + 1).noalias()+=
+                            mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_gravity;
                     }
+                    i++;
                 }
             }
         }
 
-        template<typename JointD> void calcSlotineLiRegressorDq(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobianDotsDq, const aligned_vector<LieBracketSE3<T> > &lbSE3, const aligned_vector<AdjointSE3<T> > &Ads, const Eigen::MatrixBase<JointD> &qd, const Eigen::MatrixBase<JointD> &qdd, aligned_vector<Regressor<T> > &regressorsDq, const T eps = T(1e-4)) {
-            size_t regressorCols = regressorsDq[0].cols() / m_chain->getNumOfJoints();
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                regressorsDq[i1].setZero();
-                for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
-                    mt_bodyVelocity.getVelocity().setZero();
-                    Ads[i].applyInverse(m_gravity, mt_bodyVelocity.getVelocity());
-                    mt_bodyVelocity.getVelocity() += jacobians[i] * qdd + lbSE3[i].getMatrix() * jacobians[i] * qd + jacobianDots[i] * qd;
+        template<Frame OF= Frame::BODY, typename JointD>
+        void calcSlotineLiRegressorDq(const aligned_vector<Jacobian<T>> &jacs,
+                                      const aligned_vector<Jacobian<T>> &jacDots,
+                                      const aligned_vector<aligned_vector<Jacobian<T>>> &jacsDq,
+                                      const aligned_vector<aligned_vector<Jacobian<T>>> &jacDotsDq,
+                                      aligned_vector<LieBracketSE3<T>> &adjs, const aligned_vector<AdjointSE3<T>> &Ads,
+                                      const Eigen::MatrixBase<JointD> &qd, const Eigen::MatrixBase<JointD> &qdd,
+                                      aligned_vector<Regressor<T>> &regressorsDq) {
+            static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
+
+            Ads[0].apply(m_gravity, mt_gravity);
+            for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
+                mt_bodyVelocity.getVelocity().setZero();
+                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                // J * qdd_r + Ads^-1 grav
+                mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
+                // J * q_r
+                mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                // adj * J * q_r
+                adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
+                // J qdd_r + adj J q_r + Ads^-1 grav
+                mt_bodyVelocity+= mt_6x6_1.col(1);
+                // J qdd_r + adj J q_r + Jd qd_r + Ads^-1 grav
+                mt_bodyVelocity+= jacDots[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                // A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav)
+                momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor3);
+                // A(J q_r)
+                momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
+                adjs[i].calcMatrix();
+                // A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav) - adjsT A(J q_r)
+                mt_momentumRegressor3.noalias()-= adjs[i].getMatrix().transpose() * mt_momentumRegressor2;
+                for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
+                    // J/dq^T (A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav) - adjsT A(J q_r))
+                    regressorsDq[i1].template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()=
+                        jacsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor3;
+
+                    Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                    mt_tempVelocity= jacs[i].col(i1);
+                    //-adj_jk * Ad^-1 * grav
+                    mt_tempVelocity.apply(mt_bodyVelocity.getVelocity(), mt_6x6_1.col(5), mt_6x6_1.col(5));
+                    mt_bodyVelocity= -mt_6x6_1.col(5);
+
+                    // J/dq qdd-adj * Ad^-1 * grav
+                    mt_bodyVelocity+= jacsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
+                    // Jd/dq qd+J/dq qdd-adj * Ad^-1 * grav
+                    mt_bodyVelocity+= jacDotsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+
+                    // J/dq qd_r
+                    mt_6x6_1.col(2)= jacsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                    adjs[i].apply(mt_6x6_1.col(2), mt_6x6_1.col(3));
+                    // Jd/dq qd+J/dq qdd-adj * Ad^-1 * grav + adjs J/dq qd
+                    mt_bodyVelocity+= mt_6x6_1.col(3);
+
+                    // J/dq qd
+                    mt_tempVelocity.setVelocity(jacsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) *
+                                                m_chain->getQd().head(i + 1));
+                    // adj_(J/dq qd) J qd
+                    mt_tempVelocity.apply(mt_6x6_1.col(0), mt_6x6_1.col(4), mt_6x6_1.col(4));
+                    // Jd/dq qd+J/dq qdd-adj * Ad^-1 * grav + adjs J/dq qd + adj_(J/dq qd) J qd
+                    mt_bodyVelocity+= mt_6x6_1.col(4);
+
+                    // A(Jd/dq qd+J/dq qdd-adj * Ad^-1 * grav + adjs J/dq qd + adj_(J/dq qd) J qd)
                     momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                    momentumRegressor(jacobians[i] * qd, mt_momentumRegressor2);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobiansDq[i][i1].transpose() * (mt_momentumRegressor - lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2);
+                    regressorsDq[i1].template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()+=
+                        jacs[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
 
-                    Ads[i].applyInverse(m_gravity, mt_bodyVelocity.getVelocity());
+                    ////////////////////////////////////////////////////////////
 
+                    momentumRegressor(mt_6x6_1.col(2), mt_momentumRegressor);
+                    // TODO optimize
+                    mt_momentumRegressor= adjs[i].getMatrix().transpose() * mt_momentumRegressor;
+
+                    mt_tempVelocity.calcMatrix();
+                    mt_momentumRegressor.noalias()+= mt_tempVelocity.getMatrix().transpose() * mt_momentumRegressor2;
+                    regressorsDq[i1].template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()-=
+                        jacs[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
+                }
+            }
+        }
+
+        template<typename JointD>
+        void calcSlotineLiRegressorDqd(const aligned_vector<Jacobian<T>> &jacobians,
+                                       const aligned_vector<Jacobian<T>> &jacobianDots,
+                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
+                                       const aligned_vector<LieBracketSE3<T>> &lbSE3,
+                                       const Eigen::MatrixBase<JointD> &qd,
+                                       aligned_vector<Regressor<T>> &regressorsDq) {
+            for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
+                // Jq
+                mt_6x6_1.col(3).noalias()= jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+
+                // A(Jq)
+                momentumRegressor(jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1),
+                                  mt_momentumRegressor2);
+
+                for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
+                    // adj(J^h_k)
                     mt_tempVelocity.setVelocity(jacobians[i].col(i1));
-                    mt_bodyVelocity.getVelocity() = -mt_tempVelocity.getMatrix() * mt_bodyVelocity.getVelocity() + jacobiansDq[i][i1] * qdd + jacobianDotsDq[i][i1] * qd + lbSE3[i].getMatrix() * jacobiansDq[i][i1] * qd;
+                    // adj(J^h_k) Jq
+                    mt_tempVelocity.apply(mt_6x6_1.col(3), mt_bodyVelocity.getVelocity(), mt_6x6_1.col(0));
 
-                    mt_tempVelocity.setVelocity(jacobiansDq[i][i1] * m_chain->getQd());
-                    mt_bodyVelocity.getVelocity() += mt_tempVelocity.getMatrix() * jacobians[i] * qd;
+                    // adj_0,k J^h_k
+                    lbSE3[i].apply(jacobians[i].col(i1), mt_6x6_1.col(1));
+
+                    // adj(J^h_k) Jq + adj_0,k J^h_k
+                    mt_bodyVelocity+= mt_6x6_1.col(1);
+                    // adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd
+                    mt_bodyVelocity+= jacobiansDq[i1][i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
+                    // adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd+ J^h_k
+                    mt_bodyVelocity+= jacobianDots[i].col(i1);
+                    // A(adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd+ J^h_k)
                     momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) += jacobians[i].transpose() * mt_momentumRegressor;
 
-                    momentumRegressor(jacobiansDq[i][i1] * m_chain->getQd(), mt_momentumRegressor);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) -= jacobians[i].transpose() * (mt_tempVelocity.getMatrix().transpose() * mt_momentumRegressor2 + lbSE3[i].getMatrix().transpose() * mt_momentumRegressor);
+                    // TODO optimize
+                    // A(adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd+ J^h_k) - adj(J^h_k)^T A(Jq)
+                    mt_momentumRegressor.noalias()-= mt_tempVelocity.getMatrix().transpose() * mt_momentumRegressor2;
 
-                    if (regressorCols == 12) {
-                        //limit creates a deadzone for qd around 0 (might help with qd noise)
-                        regressorsDq[i1](i, regressorCols *i + 10) = 0;
-                        regressorsDq[i1](i, regressorCols *i + 11) = 0;
-                    }
-                }
-            }
-        }
+                    // J^T A(adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd+ J^h_k) - adj(J^h_k)^T A(Jq)
+                    regressorsDq[i1].template block<Eigen::Dynamic, 10>(0, 10 * i, i + 1, 10).noalias()=
+                        jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * (mt_momentumRegressor);
 
-        template<typename JointD> void calcSlotineLiRegressorDqd(const aligned_vector<Jacobian<T> > &jacobians, const aligned_vector<Jacobian<T> > &jacobianDots, const aligned_vector<aligned_vector<Jacobian<T> > > &jacobiansDq, const aligned_vector<LieBracketSE3<T> > &lbSE3, const Eigen::MatrixBase<JointD> &qd, aligned_vector<Regressor<T> > &regressorsDq, const T eps = T(1e-4)) {
-            size_t regressorCols = regressorsDq[0].cols() / m_chain->getNumOfJoints();
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                regressorsDq[i1].setZero();
-                for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
-                    mt_bodyVelocity.getVelocity().setZero();
-                    mt_tempVelocity.setVelocity(jacobians[i].col(i1));
-                    mt_bodyVelocity.getVelocity() = mt_tempVelocity.getMatrix() * jacobians[i] * qd + lbSE3[i].getMatrix() * jacobians[i].col(i1) + jacobiansDq[i][i1] * qd + jacobianDots[i].col(i1);
-                    momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
-                    momentumRegressor(jacobians[i] * qd, mt_momentumRegressor2);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * (mt_momentumRegressor - mt_tempVelocity.getMatrix().transpose() * mt_momentumRegressor2);
-
+                    // A(J^h_k)
                     momentumRegressor(jacobians[i].col(i1), mt_momentumRegressor);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) -= jacobians[i].transpose() * lbSE3[i].getMatrix().transpose() * mt_momentumRegressor;
-                }
-                if (regressorCols == 12) {
-                    //limit creates a deadzone for qd around 0 (might help with qd noise)
-                    regressorsDq[i1](i1, regressorCols *i1 + 10) = 1;
-                    regressorsDq[i1](i1, regressorCols *i1 + 11) = sgnDeriv(m_chain->getQd()(i1), eps);
+                    //(J^T A(adj(J^h_k) Jq + adj_0,k J^h_k + Jdq[i1][i] qd+ J^h_k) - adj(J^h_k)^T A(Jq)) - J^{T}
+                    // adj_{0,k} A(J^h_k)
+                    regressorsDq[i1].template block<Eigen::Dynamic, 10>(0, 10 * i, i + 1, 10).noalias()-=
+                        jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
+                        lbSE3[i].getMatrix().transpose() * mt_momentumRegressor;
                 }
             }
         }
-        void calcSlotineLiRegressorDqdd(const aligned_vector<Jacobian<T> > &jacobians, aligned_vector<Regressor<T> > &regressorsDq, const T eps = T(1e-4)) {
-            size_t regressorCols = regressorsDq[0].cols() / m_chain->getNumOfJoints();
-            for (size_t i1 = 0; i1 < m_chain->getNumOfJoints(); i1++) {
+        void calcSlotineLiRegressorDqdd(const aligned_vector<Jacobian<T>> &jacobians,
+                                        aligned_vector<Regressor<T>> &regressorsDq) {
+            for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
                 regressorsDq[i1].setZero();
-                for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
+                for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
                     momentumRegressor(jacobians[i].col(i1), mt_momentumRegressor);
-                    regressorsDq[i1].block(0, regressorCols * i, m_chain->getNumOfJoints(), 10) = jacobians[i].transpose() * mt_momentumRegressor;
+                    regressorsDq[i1].template block<Eigen::Dynamic, 10>(0, 10 * i, i + 1, 10).noalias()=
+                        jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
                 }
             }
         }
-    };
-}
+    }; // namespace ARDL
+} // namespace ARDL

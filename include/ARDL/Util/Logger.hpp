@@ -1,8 +1,11 @@
 #pragma once
-#include <spdlog/spdlog.h>
-#include <string>
 
+#include <fmt/core.h>
 #include <fmt/ostream.h>
+
+#include <spdlog/spdlog.h>
+#include "spdlog/sinks/stdout_color_sinks.h"
+#include <string>
 
 namespace ARDL {
     namespace Util {
@@ -25,7 +28,7 @@ namespace ARDL {
                     console = spdlog::stdout_color_mt(name);
                 }
                 #ifdef LOG_DEBUG_ON
-                spdlog::set_level(spdlog::level::debug);
+                    spdlog::set_level(spdlog::level::debug);
                 #endif
             }
             /**
@@ -43,42 +46,42 @@ namespace ARDL {
              */
             #ifdef LOG_DEBUG_ON
                 #if LOG_DEBUG_ON >= 1
-                #define LOG_DEBUG_LEVEL1(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 1) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL1]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL1(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 1) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL1]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL1(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL1(INPUT, ...) (void)0
                 #endif
                 #if LOG_DEBUG_ON >= 2
-                #define LOG_DEBUG_LEVEL2(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 2) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL2]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL2(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 2) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL2]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL2(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL2(INPUT, ...) (void)0
                 #endif
                 #if LOG_DEBUG_ON >= 3
-                #define LOG_DEBUG_LEVEL3(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 3) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL3]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL3(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 3) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL3]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL3(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL3(INPUT, ...) (void)0
                 #endif
                 #if LOG_DEBUG_ON >= 4
-                #define LOG_DEBUG_LEVEL4(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 4) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL4]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL4(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 4) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL4]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL4(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL4(INPUT, ...) (void)0
                 #endif
                 #if LOG_DEBUG_ON >= 5
-                #define LOG_DEBUG_LEVEL5(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 5) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL5]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL5(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 5) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL5]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL5(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL5(INPUT, ...) (void)0
                 #endif
                 #if LOG_DEBUG_ON >= 6
-                #define LOG_DEBUG_LEVEL6(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 6) ? (void)0 : (void)ARDL::Util::log->getConsole()->debug((std::string("\033[33m[LEVEL6]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
+        #define LOG_DEBUG_LEVEL6(INPUT, ...) (ARDL::Util::RUNTIME_LOG_LEVEL < 6) ? (void)0 : (void)ARDL::Util::logger->getConsole()->debug((std::string("\033[33m[LEVEL6]\033[0m ") + INPUT).c_str(), ## __VA_ARGS__)
                 #else
-                #define LOG_DEBUG_LEVEL6(INPUT, ...) (void)0
+        #define LOG_DEBUG_LEVEL6(INPUT, ...) (void)0
                 #endif
             #else
-                #define LOG_DEBUG_LEVEL1(INPUT, ...) (void)0
-                #define LOG_DEBUG_LEVEL2(INPUT, ...) (void)0
-                #define LOG_DEBUG_LEVEL3(INPUT, ...) (void)0
-                #define LOG_DEBUG_LEVEL4(INPUT, ...) (void)0
-                #define LOG_DEBUG_LEVEL5(INPUT, ...) (void)0
-                #define LOG_DEBUG_LEVEL6(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL1(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL2(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL3(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL4(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL5(INPUT, ...) (void)0
+    #define LOG_DEBUG_LEVEL6(INPUT, ...) (void)0
             #endif
         };
 
@@ -86,13 +89,13 @@ namespace ARDL {
          * @brief The global log object.
          *
          */
-        static std::shared_ptr<Logger> log = std::make_shared<Logger>("logger");
+        static std::shared_ptr<Logger> logger = std::make_shared<Logger>("logger");
 
         #ifdef LOG_DEBUG_ON
-        /**
-         * If logging is enabled a runtime log level can also be used to limit the messages displayed. The level is determined by RUNTIME_LOG_LEVEL.
-         */
-        static size_t RUNTIME_LOG_LEVEL = LOG_DEBUG_ON;
+            /**
+             * If logging is enabled a runtime log level can also be used to limit the messages displayed. The level is determined by RUNTIME_LOG_LEVEL.
+             */
+            static size_t RUNTIME_LOG_LEVEL = LOG_DEBUG_ON;
         #endif
     }
 }

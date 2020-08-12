@@ -43,8 +43,9 @@ namespace ARDL {
                                            AI_CONFIG_PP_SBP_REMOVE,
                                            aiPrimitiveType_POINT
                                            | aiPrimitiveType_LINE);
-
+                std::cout<<"FILENAME ORIG: "<<filename<<std::endl;
                 filename = extractModelPath(filename);
+                std::cout<<"FILENAME NEW: "<<filename<<std::endl;
                 std::ifstream t(filename);
                 std::string input_model((std::istreambuf_iterator<char>(t)),
                                         std::istreambuf_iterator<char>());
@@ -96,6 +97,8 @@ namespace ARDL {
                         model->addTriangle(vertices[0], vertices[1], vertices[2]);
                     }
                 }
+                delete propertyStore;
+                delete _mesh;
             }
 
             /**

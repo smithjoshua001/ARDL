@@ -2,5 +2,12 @@ list(APPEND DLIB_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_executable(${PROJECT_NAME}_ModelTests ${CMAKE_CURRENT_SOURCE_DIR}/ModelAligned.cpp)
 target_include_directories(${PROJECT_NAME}_ModelTests PRIVATE ${${PROJECT_NAME}_SOURCE_DIR}/include ${DLIB_INCLUDES})
-target_compile_features(${PROJECT_NAME}_ModelTests PRIVATE cxx_std_11)
+
+target_compile_features(${PROJECT_NAME}_ModelTests PRIVATE cxx_std_17)
+message(STATUS "EXTERNAL DATA: ${ARDL_EXTERNAL_DATA} $<BOOL:${ARDL_EXTERNAL_DATA}>")
+target_compile_definitions(${PROJECT_NAME}_ModelTests PRIVATE ARDL_VARIANT=${ARDL_VARIANT} ARDL_SHARED_PTR=${ARDL_SHARED_PTR} ARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>)
+
+target_compile_options(${PROJECT_NAME}_ModelTests PRIVATE ${pinocchio_CFLAGS_OTHER})
 target_link_libraries(${PROJECT_NAME}_ModelTests PRIVATE ${DLIB_PATHS})
+install(TARGETS ${PROJECT_NAME}_ModelTests
+     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

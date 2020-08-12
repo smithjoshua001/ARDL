@@ -1,0 +1,21 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@-targets.cmake")
+find_package(Eigen3 @EIGEN3_VERSION_STRING@)
+find_package(fmt)
+
+find_package(PkgConfig REQUIRED)
+pkg_search_module(urdfdom_headers REQUIRED IMPORTED_TARGET urdfdom_headers>=1.0.0)
+pkg_search_module(urdfdom REQUIRED IMPORTED_TARGET urdfdom>=1.0.0)
+find_package(assimp REQUIRED)
+
+pkg_search_module(spdlog REQUIRED IMPORTED_TARGET spdlog)
+
+pkg_search_module(CCD REQUIRED IMPORTED_TARGET ccd)
+
+find_package(fcl REQUIRED)
+
+pkg_search_module(RapidJSON REQUIRED IMPORTED_TARGET RapidJSON)
+pkg_search_module(tinyxml2 REQUIRED IMPORTED_TARGET tinyxml2)
+
+check_required_components("@PROJECT_NAME@")

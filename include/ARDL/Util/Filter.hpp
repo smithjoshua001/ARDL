@@ -24,7 +24,9 @@ namespace ARDL {
                 }
                 template <typename Derived> Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> compute(const Eigen::MatrixBase<Derived> &newInput) {
                     static_assert(std::is_same<typename Derived::Scalar, T>::value, "must be same scalar");
-                    buffer = (1 - gamma) * newInput + gamma * buffer;
+                    buffer *= gamma;
+                    buffer.noalias() += (1-gamma)*newInput;
+                    //buffer = (1 - gamma) * newInput + gamma * buffer;
                     return buffer;
                 }
                 template <typename Derived> void setBuffer(const Eigen::MatrixBase<Derived> &buf) {
@@ -38,6 +40,7 @@ namespace ARDL {
                     return initial;
                 }
                 void setCutoffAndSampling(T &cutoff, T &sampling) {
+                    this->cutoff = cutoff;
                     //https://en.wikipedia.org/wiki/Low-pass_filter
                     //RC = 1/(2*PI*f_c)
                     T tmp1 = 1 / (cutoff * 2 * M_PI);
@@ -51,11 +54,18 @@ namespace ARDL {
                     //https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8460856 (23)
                     return (1 - gamma) * (1 / gamma) * (1 / samplingTime);
                 }
+                T getCutoff(){
+                    return cutoff;
+                }
+                T getSamplingRate(){
+                    return 1.0/samplingTime;
+                }
             private:
                 Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> buffer;
                 Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> initial;
                 T gamma;
                 T samplingTime;
+                T cutoff;
             };
         }
     }
