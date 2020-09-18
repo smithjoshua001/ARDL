@@ -90,6 +90,7 @@ check_header_update(${${CMAKE_PROJECT_NAME}_HEADERS})
 list(APPEND DEFS ARDL_VARIANT=${ARDL_VARIANT} ARDL_SHARED_PTR=${ARDL_SHARED_PTR} ARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>)
 
 add_subdirectory(ARDL-Trajectory)
+#add_subdirectory(src/Python)
 
 add_dummy(DLIB_INCLUDES DLIB_PATHS DEFS)
 generate_compile_commands()
@@ -149,25 +150,36 @@ export(PACKAGE ${CMAKE_PROJECT_NAME})
  add_subdirectory(ARDL-SP)
  add_subdirectory(ARDL-Examples)
 
+# generate_dependancies_shared(EIGEN3 SPDLOG FMT urdfdom_headers urdfdom tinyxml2 ASSIMP CCD FCL Threads json11)
+# Eigen3::Eigen PkgConfig::urdfdom PkgConfig::spdlog PkgConfig::CCD fcl PkgConfig::RapidJSON PkgConfig::tinyxml2
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:Eigen3::Eigen,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:PkgConfig::urdfdom,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:PkgConfig::spdlog,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:PkgConfig::CCD,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:fcl,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:PkgConfig::RapidJSON,INTERFACE_INCLUDE_DIRECTORIES>)
+# list(APPEND DLIB_INCLUDES $<TARGET_PROPERTY:PkgConfig::tinyxml2,INTERFACE_INCLUDE_DIRECTORIES>)
+# ARDL_VARIANT=${ARDL_VARIANT};ARDL_SHARED_PTR=${ARDL_SHARED_PTR};ARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>
+execute_process(COMMAND cling-config --cmake OUTPUT_VARIABLE CPPYY_MODULE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
+message("CPYY_MODULE_PATH: " ${CPPYY_MODULE_PATH})
+list(INSERT CMAKE_MODULE_PATH 0 ${CPPYY_MODULE_PATH})
+find_package(Cppyy REQUIRED)
+message(STATUS "VERSION: ${Cppyy_VERSION}")
+message(STATUS "HERE+++++++++++++++++++++++++++++++++++++++++++++++++++ ${DLIB_INCLUDES}")
+cppyy_add_bindings(
+  "ARDL" "${PROJECT_VERSION}" "Joshua Smith" "Joshua.Smith@ed.ac.uk"
+  LANGUAGE_STANDARD "17"
+  GENERATE_OPTIONS "-D__PIC__;-Wno-macro-redefined;-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
+  COMPILE_OPTIONS "-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
+  INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;/home/joshua/ssd/ProjectsInstall/PhD/ARDL_ws/install/include/eigen3;/home/joshua/ssd/ProjectsInstall/PhD/ARDL_ws/install/include"
+  LINK_LIBRARIES "fmt::fmt;${DLIB_PATHS}"
+  H_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  H_FILES "${${CMAKE_PROJECT_NAME}_HEADERS}"
+  # H_FILES "ARDL/Util/Math.hpp;ARDL/Math/AdjointSE3.hpp;ARDL/Math/SpatialInertia.hpp"
+)
+message(STATUS "HEADERS ${${CMAKE_PROJECT_NAME}_HEADERS}")
+install(CODE "execute_process(COMMAND pip3 install ${PY_WHEEL_FILE})")
+
 unset(DLIBS)
 unset(DLIB_PATHS)
 unset(DLIB_INCLUDES)
-# generate_dependancies_shared(EIGEN3 SPDLOG FMT urdfdom_headers urdfdom tinyxml2 ASSIMP CCD FCL Threads json11)
-
-# execute_process(COMMAND cling-config --cmake OUTPUT_VARIABLE CPPYY_MODULE_PATH OUTPUT_STRIP_TRAILING_WHITESPACE)
-# message("CPYY_MODULE_PATH: " ${CPPYY_MODULE_PATH})
-# list(INSERT CMAKE_MODULE_PATH 0 ${CPPYY_MODULE_PATH})
-# find_package(Cppyy 1.6.2 REQUIRED)
-# message(STATUS "VERSION: ${Cppyy_VERSION}")
-# cppyy_add_bindings(
-#   "ARDL" "${PROJECT_VERSION}" "Joshua Smith" "Joshua.Smith@ed.ac.uk"
-#   LANGUAGE_STANDARD "17"
-#   GENERATE_OPTIONS "-D__PIC__;-Wno-macro-redefined"
-#   COMPILE_OPTIONS "${CXX_FLAGS_RELEASE}"
-#   INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;${DLIB_INCLUDES}"
-#   LINK_LIBRARIES "${DLIB_PATHS}"
-#   H_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include"
-#   H_FILES "${${CMAKE_PROJECT_NAME}_HEADERS}"
-# )
-# message(STATUS "HEADERS ${${CMAKE_PROJECT_NAME}_HEADERS}")
-# install(CODE "execute_process(COMMAND pip3 install ${PY_WHEEL_FILE})")

@@ -3,6 +3,9 @@
 
 #include "ARDL/Util/Math.hpp"
 
+// #ifdef ARDL_EXP_TEM
+//             : LieExpression<AdjointSE3<T>>
+// #endif
 namespace ARDL {
     using namespace Util::Math;
     namespace Math {
@@ -13,9 +16,6 @@ namespace ARDL {
          */
         template<typename T>
         class AdjointSE3
-#ifdef ARDL_EXP_TEM
-            : LieExpression<AdjointSE3<T>>
-#endif
         {
              private:
             Eigen::Matrix<T, 3, 3> m_R;
@@ -277,17 +277,17 @@ namespace ARDL {
             friend std ::ostream &operator<<(std::ostream &out, const AdjointSE3<T> &At) {
                 return out << "R:\n" << At.m_R << "\np:\n" << At.m_P;
             }
-#ifdef ARDL_EXP_TEM
-            /**
-             *  @brief
-             *
-             *  @param in
-             **/
-            template<typename Exp2>
-            void operator=(LieExpression<Exp2> &in) {
-                in(*this);
-            }
-#endif
+// #ifdef ARDL_EXP_TEM
+//             /**
+//              *  @brief
+//              *
+//              *  @param in
+//              **/
+//             template<typename Exp2>
+//             void operator=(LieExpression<Exp2> &in) {
+//                 in(*this);
+//             }
+// #endif
         };
     } // namespace Math
 } // namespace ARDL

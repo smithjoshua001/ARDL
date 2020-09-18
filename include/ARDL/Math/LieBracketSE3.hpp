@@ -250,12 +250,12 @@ namespace ARDL {
                 cache= false;
             }
 
-#ifdef ARDL_EXP_TEM
-            template<typename Exp2>
-            void operator=(LieExpression<Exp2> &in) {
-                in(*this);
-            }
-#endif
+// #ifdef ARDL_EXP_TEM
+//             template<typename Exp2>
+//             void operator=(LieExpression<Exp2> &in) {
+//                 in(*this);
+//             }
+// #endif
         };
     } // namespace Math
 } // namespace ARDL

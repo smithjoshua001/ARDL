@@ -5,7 +5,7 @@
 #include "ARDL/typedefs.hpp"
 #include "ARDL/Util/Math.hpp"
 #include "ARDL/Math/AdjointSE3.hpp"
-#include "ARDL/Math/LieBracketSE3.hpp"
+// #include "ARDL/Math/LieBracketSE3.hpp"
 using namespace std;
 using namespace Eigen;
 namespace ARDL {
