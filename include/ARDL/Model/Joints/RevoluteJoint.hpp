@@ -54,6 +54,7 @@ namespace ARDL {
                 template<typename qDerived>
                 void setQ(const Eigen::MatrixBase<qDerived> &q) {
                     if(this->m_q[0] != q[0]) {
+
                         this->cache= false;
                         this->m_q[0]= q[0];
                         T cosq, sinq;

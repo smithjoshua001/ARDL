@@ -27,6 +27,7 @@ namespace ARDL {
         size_t m_baseParamNo;
 
         Regressor<T> m_projRegressor, m_projParameters;
+        MatrixX<T> m_regressorProjected;
 
         Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> mt_6xJ;
 
@@ -178,7 +179,7 @@ namespace ARDL {
                 //         const_cast<Eigen::MatrixBase<Derived> &>(C).noalias()+= jacobians[i].transpose() * mt_6xJ;
                 //         i++;
                 //     }
-                // } else 
+                // } else
                 if constexpr(OF == Frame::BODY) {
                     if(!link.isRoot() && !ARDL_visit(link.getParentJoint(), isFixed())) {
                         lbSE3[i].applyTranspose(link.getSI(), mt_6x6_1);
@@ -340,7 +341,7 @@ namespace ARDL {
             Eigen::Matrix<T, 6, 2> mt_6x6_1;
             Ads[0].apply(m_gravity, mt_gravity);
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
-                Ads[i+1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
                 mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
                 mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
                 adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1), mt_6x6_1.col(1));
@@ -350,7 +351,7 @@ namespace ARDL {
                 momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
                 // adjs[i].applyTransposeTo(mt_momentumRegressor2, mt_momentumRegressor3);
                 adjs[i].calcMatrix();
-                mt_momentumRegressor3 = adjs[i].getMatrix().transpose()*mt_momentumRegressor2;
+                mt_momentumRegressor3= adjs[i].getMatrix().transpose() * mt_momentumRegressor2;
                 mt_momentumRegressor.noalias()-= mt_momentumRegressor3;
                 const_cast<Eigen::MatrixBase<RD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()=
                     jacs[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
@@ -461,7 +462,6 @@ namespace ARDL {
 
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> regressors(m_chain->getNumOfJoints(),
                                                                         10 * m_chain->getNumOfJoints());
-            
 
             ARDL::Util::init(jacobians, m_chain->getNumOfJoints());
             ARDL::Util::init(jacobianDots, m_chain->getNumOfJoints());
@@ -470,21 +470,27 @@ namespace ARDL {
             qd.resize(m_chain->getNumOfJoints());
             qdd.resize(m_chain->getNumOfJoints());
             R.setZero();
+
+            regressors.setZero();
             // CREATE RANDOM REGRESSOR STACK
             for(size_t k= 0; k < random_samples; k++) {
                 m_chain->random();
                 qd= m_chain->getQd();
-                qdd.setRandom() * qddLimit;
+                qdd.setRandom();
+                qdd*= qddLimit;
+
                 m_chain->updateMatricesOptim();
                 fk.getBodyAdjointsOptim(Ads);
+
                 fk.template getJacobians<ARDL::Frame::BODY>(Ads, jacobians);
                 fk.getLieBrackets(lbSE3, jacobians);
                 fk.template getJacobianDots<ARDL::Frame::BODY>(Ads, lbSE3, jacobians, jacobianDots);
                 this->calcSlotineLiRegressor<ARDL::Frame::BODY>(qd, qdd, Ads, lbSE3, jacobians, jacobianDots,
                                                                 regressors);
 
-                R+= regressors.transpose() *
-                    regressors;
+
+                R+= regressors.transpose() * regressors;
+
             }
             Eigen::ColPivHouseholderQR<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>> qr(R);
             qr.setThreshold(threshold);
@@ -504,26 +510,32 @@ namespace ARDL {
             PQ= qr.colsPermutation();
 
             m_baseParamNo= qr.rank();
-            //Pb
+            // Pb
             m_projRegressor= PQ.block(0, 0, PQ.rows(), m_baseParamNo);
-            
-            //R1^{-1}*R2
+
+            // R1^{-1}*R2
             m_projParameters= RQ.block(0, 0, m_baseParamNo, m_baseParamNo).inverse() *
                               RQ.block(0, m_baseParamNo, m_baseParamNo, RQ.cols() - m_baseParamNo);
 
             m_projParameters=
-                (m_projParameters.array().abs() >threshold).matrix().template cast<T>().cwiseProduct(m_projParameters);
+                (m_projParameters.array().abs() > threshold).matrix().template cast<T>().cwiseProduct(m_projParameters);
 
             m_projParameters=
                 m_projRegressor.transpose() +
                 m_projParameters * PQ.block(0, m_baseParamNo, PQ.rows(), PQ.cols() - m_baseParamNo).transpose();
-        
-            m_projRegressor = m_projParameters.transpose()*(m_projParameters*m_projParameters.transpose()).inverse();
+
+            m_projRegressor= m_projParameters.transpose() * (m_projParameters * m_projParameters.transpose()).inverse();
+            m_regressorProjected.resize(m_chain->getNumOfJoints(), m_baseParamNo);
         }
 
         const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getRegressorProjector() { return m_projRegressor; }
         const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getParameterProjector() { return m_projParameters; }
         const size_t &getNumOfBaseParams() { return m_baseParamNo; }
+
+        const ARDL::MatrixX<T> &projectRegressor(const ARDL::Regressor<T> &regress) {
+            m_regressorProjected= regress * m_projRegressor;
+            return m_regressorProjected;
+        }
 
         template<Frame OF= Frame::BODY>
         void calcJointInertiaMatrixDq(const aligned_vector<AdjointSE3<T>> Ads,
