@@ -38,6 +38,8 @@ option(ARDL_SHARED_PTR "Enable shared ptr for data handling" TRUE)
 
 option(ARDL_EXTERNAL_DATA "Enable external data structure (for threading ability)" FALSE)
 
+option(ARDL_EXAMPLES "Enable ARDL Examples" FALSE)
+
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
 
@@ -92,8 +94,6 @@ list(APPEND DEFS ARDL_VARIANT=${ARDL_VARIANT} ARDL_SHARED_PTR=${ARDL_SHARED_PTR}
 add_subdirectory(ARDL-Trajectory)
 #add_subdirectory(src/Python)
 
-add_dummy(DLIB_INCLUDES DLIB_PATHS DEFS)
-generate_compile_commands()
 
 CONFIGURE_FILE (
   ${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_PROJECT_NAME}.pc.cmake
@@ -148,7 +148,12 @@ install(FILES
 export(PACKAGE ${CMAKE_PROJECT_NAME})
  add_subdirectory(ARDL-NP)
  add_subdirectory(ARDL-SP)
+ if(ARDL_EXAMPLES)
  add_subdirectory(ARDL-Examples)
+endif()
+ add_dummy(DLIB_INCLUDES DLIB_PATHS DEFS)
+generate_compile_commands()
+
 
 # generate_dependancies_shared(EIGEN3 SPDLOG FMT urdfdom_headers urdfdom tinyxml2 ASSIMP CCD FCL Threads json11)
 # Eigen3::Eigen PkgConfig::urdfdom PkgConfig::spdlog PkgConfig::CCD fcl PkgConfig::RapidJSON PkgConfig::tinyxml2
