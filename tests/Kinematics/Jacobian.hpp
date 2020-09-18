@@ -54,7 +54,7 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
     adjs.resize(c->getNumOfJoints());
 
     ARDL::Dynamics<double> dyn(c);
-    constexpr ARDL::Frame frame= ARDL::Frame::SPATIAL;
+    constexpr ARDL::Frame frame= ARDL::Frame::BODY;
     c->updateChain(q, qd);
     c->updateMatrices();
     if constexpr(frame == ARDL::Frame::SPATIAL) {

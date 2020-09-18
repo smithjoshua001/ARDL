@@ -121,7 +121,7 @@ TEST_CASE("Base Regressor Check", "[adjoint][kinematics]") {
 #if ARDL_VARIANT == ON
     std::cout << "VARIANT ENABLED" << std::endl;
 #endif
-    using T= double;
+    using T= float;
 
     pinocchio::Model pModel;
     pinocchio::Data pData;
@@ -170,18 +170,16 @@ TEST_CASE("Base Regressor Check", "[adjoint][kinematics]") {
     ARDL::Util::init(jacobianDotsDq, c->getNumOfJoints());
     ARDL::Util::init(Y, c->getNumOfJoints());
 
-    dyn->calcBaseProjection(50000, M_PI / 2, 1e-10);
+    dyn->calcBaseProjection(100000, M_PI, 1e-10);
     Yb.resize(c->getNumOfJoints(), dyn->getNumOfBaseParams());
 
-    std::cout << c->getNumOfJoints()*10 << std::endl;
-    std::cout << dyn->getNumOfBaseParams() << std::endl;
     VectorX<T> baseParams= dyn->getParameterProjector() * params;
 
     Eigen::VectorXd tauPinReg(dof);
-    Eigen::VectorXd tauARDL(dof);
+    ARDL::VectorX<T> tauARDL(dof);
 
     for(size_t i= 1; i < pModel.njoints; ++i)
-        params.segment<10>((int) ((i - 1) * 10))= pModel.inertias[i].toDynamicParameters();
+        params.segment<10>((int) ((i - 1) * 10))= pModel.inertias[i].toDynamicParameters().cast<T>();
 
     for(size_t i= 0; i < iters; i++) {
         randomJointState(q, qd, qdd);
@@ -194,11 +192,15 @@ TEST_CASE("Base Regressor Check", "[adjoint][kinematics]") {
         dyn->calcSlotineLiRegressor(qd, qdd, adjoints, adjs, jacobians, jacobianDots, Y);
         Yb= Y * dyn->getRegressorProjector();
 
-        Y= pinocchio::computeJointTorqueRegressor(pModel, pData, q, qd, qdd);
-        tauPinReg= (Y * params);
+        Y= pinocchio::computeJointTorqueRegressor(pModel, pData, q.cast<double>(), qd.cast<double>(), qdd.cast<double>()).cast<T>();
+        tauPinReg= (Y * params).cast<double>();
         tauARDL= (Yb * baseParams);
-    checkApproxMatrix(tauPinReg, tauARDL, 1e-2);
+    checkApproxMatrix(tauPinReg.cast<T>(), tauARDL, 1e-4);
     }
     std::cout << "ARDL " << tauARDL.transpose() << std::endl;
     std::cout << "PIN " << tauPinReg.transpose() << std::endl;
+    std::cout<<Yb<<std::endl << std::endl;
+
+    std::cout << c->getNumOfJoints()*10 << std::endl;
+    std::cout << dyn->getNumOfBaseParams() << std::endl;
 }

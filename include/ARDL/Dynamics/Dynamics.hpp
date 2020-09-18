@@ -7,6 +7,7 @@
 #include "ARDL/Util/Filter.hpp"
 #include "ARDL/Dynamics/LinkRegressors.hpp"
 #include "ARDL/Util/MatrixInitializer.hpp"
+#include "ARDL/Util/sobol.hpp"
 namespace ARDL {
     using namespace Model;
     using namespace Math;
@@ -466,19 +467,43 @@ namespace ARDL {
             ARDL::Util::init(jacobians, m_chain->getNumOfJoints());
             ARDL::Util::init(jacobianDots, m_chain->getNumOfJoints());
 
-            VectorX<T> qd, qdd;
+            VectorX<T> q, qd, qdd;
+            q.resize(m_chain->getNumOfJoints());
             qd.resize(m_chain->getNumOfJoints());
             qdd.resize(m_chain->getNumOfJoints());
             R.setZero();
 
             regressors.setZero();
+            SobolData *sobolGen= sobol_create(m_chain->getNumOfJoints() * 3);
+            std::vector<std::pair<T, T>> limits(m_chain->getNumOfJoints());
+            m_chain->getJointLimits(limits);
+            ARDL::VectorX<T> qdLimits(m_chain->getNumOfJoints());
+            m_chain->getJointVelocityLimits(qdLimits);
+            double *sobolRandom= (double *) malloc(m_chain->getNumOfJoints() * 3 * sizeof(double));
+            double *lb= (double *) malloc(m_chain->getNumOfJoints() * 3 * sizeof(double));
+            double* ub = (double*)malloc(m_chain->getNumOfJoints()*3*sizeof(double));
+            for(size_t i = 0; i<m_chain->getNumOfJoints();i++){
+                lb[i] = limits[i].first;
+                ub[i] = limits[i].second;
+                lb[i+m_chain->getNumOfJoints()] = -qdLimits(i);
+                ub[i+m_chain->getNumOfJoints()] = qdLimits(i);
+                lb[i+2*m_chain->getNumOfJoints()] = -qddLimit;
+                ub[i+2*m_chain->getNumOfJoints()] = qddLimit;
+            }
+
             // CREATE RANDOM REGRESSOR STACK
             for(size_t k= 0; k < random_samples; k++) {
-                m_chain->random();
-                qd= m_chain->getQd();
-                qdd.setRandom();
-                qdd*= qddLimit;
-
+                sobol_next(sobolGen, sobolRandom, lb,ub);
+                for(size_t i = 0;i<m_chain->getNumOfJoints();i++){
+                    q(i) = (T) sobolRandom[i];
+                    qd(i) = (T) sobolRandom[i+m_chain->getNumOfJoints()];
+                    qdd(i) = (T) sobolRandom[i+2*m_chain->getNumOfJoints()];
+                }
+                // m_chain->random();
+                // qd= m_chain->getQd();
+                // qdd.setRandom();
+                // qdd*= qddLimit;
+                m_chain->updateChain(q,qd);
                 m_chain->updateMatricesOptim();
                 fk.getBodyAdjointsOptim(Ads);
 
@@ -488,10 +513,12 @@ namespace ARDL {
                 this->calcSlotineLiRegressor<ARDL::Frame::BODY>(qd, qdd, Ads, lbSE3, jacobians, jacobianDots,
                                                                 regressors);
 
-
-                R+= regressors.transpose() * regressors;
-
+                R+= (regressors.transpose() * regressors);// / random_samples;
             }
+            free(sobolRandom);
+            free(lb);
+            free(ub);
+            sobol_destroy(sobolGen);
             Eigen::ColPivHouseholderQR<Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>> qr(R);
             qr.setThreshold(threshold);
             qr.compute(R);
@@ -520,11 +547,17 @@ namespace ARDL {
             m_projParameters=
                 (m_projParameters.array().abs() > threshold).matrix().template cast<T>().cwiseProduct(m_projParameters);
 
-            m_projParameters=
+            ARDL::MatrixX<T> K=
                 m_projRegressor.transpose() +
                 m_projParameters * PQ.block(0, m_baseParamNo, PQ.rows(), PQ.cols() - m_baseParamNo).transpose();
-
-            m_projRegressor= m_projParameters.transpose() * (m_projParameters * m_projParameters.transpose()).inverse();
+            m_projParameters= K;
+            // m_projRegressor = K.transpose();
+            // m_projRegressor= m_projParameters.transpose() * (m_projParameters *
+            // m_projParameters.transpose()).inverse();
+            // ARDL::MatrixX<T> Wr(m_baseParamNo, m_baseParamNo);
+            // ARDL::MatrixX<T> We(m_baseParamNo, RQ.rows()-m_baseParamNo);
+            // Wr= Q.block(0, 0, Q.rows(), m_baseParamNo) * RQ.block(0, 0, m_baseParamNo, m_baseParamNo);
+            // We =
             m_regressorProjected.resize(m_chain->getNumOfJoints(), m_baseParamNo);
         }
 

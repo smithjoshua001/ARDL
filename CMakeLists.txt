@@ -91,7 +91,7 @@ check_header_update(${${CMAKE_PROJECT_NAME}_HEADERS})
 #add_subdirectory(ARDL-Experiments)
 list(APPEND DEFS ARDL_VARIANT=${ARDL_VARIANT} ARDL_SHARED_PTR=${ARDL_SHARED_PTR} ARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>)
 
-add_subdirectory(ARDL-Trajectory)
+# add_subdirectory(ARDL-Trajectory)
 #add_subdirectory(src/Python)
 
 
