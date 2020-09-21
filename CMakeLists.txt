@@ -83,7 +83,7 @@ target_compile_definitions(${PROJECT_NAME} INTERFACE ARDL_VARIANT=${ARDL_VARIANT
 target_link_libraries(${CMAKE_PROJECT_NAME} INTERFACE ${DLIB_PATHS})
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-add_subdirectory(tests)
+# add_subdirectory(tests)
 
 check_header_update(${${CMAKE_PROJECT_NAME}_HEADERS})
 
