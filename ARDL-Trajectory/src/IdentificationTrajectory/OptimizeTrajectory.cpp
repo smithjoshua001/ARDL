@@ -1,4 +1,5 @@
 #include "ARDL/IdentificationTrajectory/MFTOptimizer.hpp"
+#include "ARDL/Util/ModelPath.hpp"
 
 #include <string>
 #include <limits>
@@ -36,9 +37,10 @@ int main(int argc, char **argv) {
         urdf = argv[2];
         config = argv[3];
     } else {
+        std::cout << "Usage: OptimizeTrajectory (optimization config) (urdf) (contraints config)" << std::endl;
         return -3;
     }
-
+    std::cout << "D1" << std::endl;
     Document optimConfig;
     std::ifstream ifs(optim);
     IStreamWrapper isw(ifs);
@@ -46,11 +48,20 @@ int main(int argc, char **argv) {
     if (!optimConfig.IsObject()) {
         return -1;
     }
-    MFTOptimizer tmp(urdf, config);
-    problem p0{tmp};
 
+    urdf= ARDL::Util::getModelFromGazeboPath(urdf);
+
+    std::cout << "D2" << std::endl;
+    MFTOptimizer *tmp = new MFTOptimizer(urdf, config);
+
+    std::cout << "D3" << std::endl;
+    // problem p0{*tmp};
+    problem p0(*tmp);
+
+    std::cout << "D3" << std::endl;
     algorithm algo;
     algorithm algosub;
+    std::cout << "D4" << std::endl;
     if (optimConfig.HasMember("optimizer")) {
         if (optimConfig["optimizer"].GetString() == std::string("cgaco")) {
             rapidjson::Value gaco = optimConfig["gaco"].GetObject();
@@ -59,12 +70,27 @@ int main(int argc, char **argv) {
             }
             algosub = algorithm{pagmo::gaco(gaco["generations"].GetInt(), gaco["kernel_size"].GetInt(), gaco["q"].GetDouble(), gaco["oracle"].GetDouble(), gaco["acc"].GetDouble(), gaco["thresh"].GetInt(), gaco["n_gen_mark"].GetInt(), gaco["impstop"].GetInt(), gaco["evalstop"].GetInt(), gaco["focus"].GetDouble(), true)};
             algo = algorithm{cstrs_self_adaptive(optimConfig["iters"].GetInt(), algosub)};
+        } else {
+            rapidjson::Value gaco = optimConfig["gaco"].GetObject();
+            if (!gaco.IsObject()) {
+                return -2;
+            }
+            algo = algorithm{pagmo::gaco(gaco["generations"].GetInt(), gaco["kernel_size"].GetInt(), gaco["q"].GetDouble(), gaco["oracle"].GetDouble(), gaco["acc"].GetDouble(), gaco["thresh"].GetInt(), gaco["n_gen_mark"].GetInt(), gaco["impstop"].GetInt(), gaco["evalstop"].GetInt(), gaco["focus"].GetDouble(), true)};
         }
     }
+    std::cout << "D5" << std::endl;
     if (argc > 5) {
         algo.set_verbosity(atof(argv[5]));
     }
-    pagmo::archipelago arch{fully_connected(), 6, algo, p0, 40};
+    std::cout << "D6" << std::endl;
+    int islands = 6, popNo = 40;
+    if (optimConfig.HasMember("optimizer")) {
+        islands = optimConfig["islands"].GetInt();
+        popNo = optimConfig["popNo"].GetInt();
+    }
+    std::cout << "D7" << std::endl;
+    pagmo::archipelago arch{fully_connected(), (size_t) islands, algo, p0, popNo};
+    std::cout<<arch<<std::endl;
     // for (island &isl : arch) {
     //     isl.get_population().get_problem().extract<MFTOptimizer>()->init();
     // }
@@ -74,6 +100,7 @@ int main(int argc, char **argv) {
     arch.wait_check();
     // std::cout << p0 << std::endl;
 
+    std::cout << "D8" << std::endl;
     size_t best_solution_index = 0;
     double best_solution_value = std::numeric_limits<double>::infinity();
     for (size_t i = 0; i < arch.get_champions_f().size(); i++) {
@@ -105,7 +132,7 @@ int main(int argc, char **argv) {
         if (argc > 6) {
             local.set_verbosity(atof(argv[6]));
         }
-        for (size_t i = 0; i < 6; i++) {
+        for (size_t i = 0; i < islands; i++) {
             arch2.push_back(island{local, arch[i].get_population()});
         }
         arch2.evolve();
@@ -124,7 +151,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    std::shared_ptr<ModifiedFourierTrajectory<double> > output = tmp.getMFT();
+    std::shared_ptr<ModifiedFourierTrajectory<double> > output = tmp->getMFT();
     Eigen::VectorXd params = Eigen::VectorXd::Zero(arch2.get_champions_x()[0].size() + 1);
     output->getParameters(params);
 
@@ -142,6 +169,9 @@ int main(int argc, char **argv) {
                 out << std::string(argv[4]) << i << "_" << std::fixed << arch2.get_champions_f()[i][0] << ".json";
                 output->saveToJSON(out.str());
             }
+            output->display();
         }
+        output->display();
     }
+    delete tmp;
 }
