@@ -1,0 +1,79 @@
+{
+    "controlRate": 50,
+    "wf_init": 0.4,
+    "trajectoryCoeffMax": 0.2,
+    "trajectoryCoeffMin": -0.2,
+    "trajectory_dof": 6,
+    "joint_limit_constraint": {
+        "max": "robot",
+        "min": "robot"
+    },
+    "velocity_limit_constraint": 2.5,
+    "link_limit_constraints": [
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            -0.1
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.1
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ],
+        [
+            2,
+            2,
+            2,
+            -2,
+            -2,
+            0.2
+        ]
+    ],
+    "collision_constraints": true
+}

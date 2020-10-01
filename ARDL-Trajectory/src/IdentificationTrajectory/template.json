@@ -1,6 +1,6 @@
 {
     "controlRate": 50,
-    "wf_init": 0.4,
+    "wf_init": 0.2,
     "trajectoryCoeffMax": 0.2,
     "trajectoryCoeffMin": -0.2,
     "trajectory_dof": 6,
@@ -24,7 +24,7 @@
             2,
             -2,
             -2,
-            0.15
+            0.1
         ],
         [
             2,

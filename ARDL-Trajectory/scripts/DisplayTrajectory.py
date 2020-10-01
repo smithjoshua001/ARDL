@@ -130,7 +130,7 @@ def main():
             #         ax.add_collection3d(pol)
             print("getting collision Vectors")
             print chain.getLink(i).getName()
-            verts=chain.getLink(i).getCollisionVectors()
+            verts=chain.getLink(i).getCollisionVertices()
             tris= chain.getLink(i).getCollisionTriangles()
             your_mesh=  [[verts[tris[ix][iy]] for iy in range(len(tris[0]))] for ix in range(len(tris))];
             print("appending_mesh")
