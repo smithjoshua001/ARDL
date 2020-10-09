@@ -7,8 +7,8 @@ find_package(NLopt REQUIRED)
 
 find_package(Pagmo REQUIRED)
 
-pkg_search_module(raylib REQUIRED raylib)
-#find_package(raylib REQUIRED)
+#pkg_search_module(raylib REQUIRED raylib)
+find_package(raylib REQUIRED)
 
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
@@ -36,7 +36,7 @@ add_executable(MFTVisualizer ${CMAKE_CURRENT_SOURCE_DIR}/src/Visualization/MFTVi
 target_include_directories(MFTVisualizer PUBLIC ${PROJECT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/include ${DLIB_INCLUDES})
 target_compile_features(MFTVisualizer PUBLIC cxx_std_17)
 target_compile_definitions(MFTVisualizer PUBLIC ${DEFS})
-target_link_libraries(MFTVisualizer PUBLIC ${DLIB_PATHS} X11 Xxf86vm Xrandr Xi stdc++fs)
+target_link_libraries(MFTVisualizer PUBLIC ${DLIB_PATHS} X11 Xxf86vm Xrandr Xi stdc++fs ${CMAKE_DL_LIBS})
 
 # add_executable(VerifyTrajectories ${CMAKE_CURRENT_SOURCE_DIR}/src/TrajectoryVerification/VerifyTrajectories.cpp)
 # target_include_directories(VerifyTrajectories PUBLIC ${PROJECT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/include ${DLIB_INCLUDES})

@@ -75,14 +75,16 @@ int main(int argc, char **argv) {
         templateJson= std::string(argv[3]);
         outputPath= std::string(argv[4]);
     } else {
-        std::cout << "Usage: OptimizeTrajectory (optimization config) (urdf) (contraints config)" << std::endl;
+        std::cout << "Usage: WorkspaceSubsets (number of samples) (urdf) (template of constraint json) (output path)" << std::endl;
         return -3;
     }
     if(argc > 5) { shiftscale= std::atof(argv[5]); }
 
     Eigen::Vector3d minLimit(-2, -2, 0.2);
 
+    std::cout<<"URDF: "<<urdf<<std::endl;
     urdf= ARDL::Util::getModelFromGazeboPath(urdf);
+    std::cout<<"URDF: "<<urdf<<std::endl;
     std::shared_ptr<Chain<double>> c;
     std::shared_ptr<ForwardKinematics<double>> fk;
     c= std::shared_ptr<Chain<double>>(new Chain<double>(urdf));
@@ -223,7 +225,7 @@ int main(int argc, char **argv) {
 
         if(MFTjson.IsObject() && valid) {
             std::stringstream ss;
-            ss << outputPath << "/Contraints_" << i << ".json";
+            ss << outputPath << "/Constraints_" << i << ".json";
             std::ofstream ofs(ss.str());
             rapidjson::OStreamWrapper osw(ofs);
             rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(osw);

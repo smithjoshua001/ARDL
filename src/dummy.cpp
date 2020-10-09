@@ -33,5 +33,6 @@
 #include "ARDL/Util/Search.hpp"
 #include "ARDL/Util/Timer.hpp"
 #include "ARDL/Util/Visit.hpp"
+#include "ARDL/Util/sobol.hpp"
 #include "ARDL/typedefs.hpp"
 int main(int argc, char* argv[]){ return 0; }
