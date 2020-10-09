@@ -30,22 +30,22 @@ namespace ARDL {
             R.setZero();
             R.block(0, 0, r, r)= qr.matrixR().block(0, 0, r, r).template triangularView<Eigen::Upper>();
             ginv(R.block(0, 0, r, r));
+            // std::cout << "QRTEST\n"
+            //           << R.block(0, 0, r,r) * pinv.block(0, 0, r, r)<< std::endl<<qr.matrixR().cols() << std::endl;
             R.setZero();
             //
-            std::cout << "QRTEST\n"
-                      << R.block(0, 0, r, qr.matrixR().cols()) * pinv.block(0, 0, qr.matrixR().cols(), r) << std::endl;
-            R.block(0, 0, r, r)= pinv.block(0, 0, qr.matrixR().cols(), r);
+            R.block(0, 0, r, r)= pinv.block(0, 0, r, r);
             // R.block(0, r, qr.matrixR().cols(), qr.householderQ().rows() - r).setZero();
             // std::cout<<"householderQ rows "<<qr.householderQ().rows()<<std::endl;
             // std::cout<<R.block(0,0,qr.matrixR().cols(),qr.householderQ().rows())<<std::endl<<std::endl;
             //
-            std::cout << R.block(0, 0, qr.matrixR().cols(), qr.householderQ().rows()) * qr.householderQ().transpose()
-                      << std::endl
-                      << std::endl;
+            // std::cout << R.block(0, 0, qr.matrixR().cols(), qr.householderQ().rows()) * qr.householderQ().transpose()
+            //           << std::endl
+            //           << std::endl;
             pinv= qr.colsPermutation() * R.block(0, 0, qr.matrixR().cols(), qr.householderQ().rows()) *
                   qr.householderQ().transpose();
             // .block(0,0,qr.householderQ().rows(),r)
-            // std::cout<<"FINAL\n"<<pinv<<std::endl<<std::endl<<std::endl;
+            // std::cout<<"FINAL\n"<<input*pinv<<std::endl<<std::endl<<std::endl;
             // std::cout<<"EQ\n"<<input.transpose()*(input*input.transpose()).inverse()<<std::endl<<std::endl;
             // pinv = input.transpose()*(input*input.transpose()).inverse();
             return pinv;

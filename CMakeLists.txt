@@ -91,7 +91,7 @@ check_header_update(${${CMAKE_PROJECT_NAME}_HEADERS})
 #add_subdirectory(ARDL-Experiments)
 list(APPEND DEFS ARDL_VARIANT=${ARDL_VARIANT} ARDL_SHARED_PTR=${ARDL_SHARED_PTR} ARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>)
 
-# add_subdirectory(ARDL-Trajectory)
+#add_subdirectory(ARDL-Trajectory)
 #add_subdirectory(src/Python)
 
 
@@ -176,7 +176,7 @@ cppyy_add_bindings(
   LANGUAGE_STANDARD "17"
   GENERATE_OPTIONS "-D__PIC__;-Wno-macro-redefined;-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
   COMPILE_OPTIONS "-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
-  INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;/home/joshua/ssd/ProjectsInstall/PhD/ARDL_ws/install/include/eigen3;/home/joshua/ssd/ProjectsInstall/PhD/ARDL_ws/install/include"
+  INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;/usr/local/include/eigen3;/usr/local/include"
   LINK_LIBRARIES "fmt::fmt;${DLIB_PATHS}"
   H_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include"
   H_FILES "${${CMAKE_PROJECT_NAME}_HEADERS}"
@@ -184,6 +184,8 @@ cppyy_add_bindings(
 )
 message(STATUS "HEADERS ${${CMAKE_PROJECT_NAME}_HEADERS}")
 install(CODE "execute_process(COMMAND pip3 install ${PY_WHEEL_FILE})")
+
+add_subdirectory(ARDL-Trajectory)
 
 unset(DLIBS)
 unset(DLIB_PATHS)
