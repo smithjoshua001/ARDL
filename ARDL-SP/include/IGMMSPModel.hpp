@@ -22,8 +22,8 @@ namespace ARDL {
             std::shared_ptr<Chain<T>> c;
             std::shared_ptr<ForwardKinematics<T>> fk;
             std::shared_ptr<Dynamics<T>> dyn;
-            aligned_vector<AdjointSE3<T>> ads;
-            aligned_vector<LieBracketSE3<T>> adjs;
+            aligned_vector<Pose<T>> ads;
+            aligned_vector<Motion<T>> adjs;
             aligned_vector<Jacobian<T>> jacs, jacDots;
             aligned_vector<aligned_vector<Jacobian<T>>> jacsDq, jacDotsDq;
             aligned_vector<Regressor<T>> regressorDq, regressorDqd, regressorDqdd;

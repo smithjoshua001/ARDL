@@ -2,6 +2,10 @@
 
 #include "ARDL/Model/Chain.hpp"
 #include "ARDL/Kinematics/ForwardKinematics.hpp"
+
+#define GLSL_VERSION             	330
+    #define GRAPHICS_API_OPENGL_21
+// #define GRAPHICS_API_OPENGL_ES2
 namespace raylib {
 #include <raylib.h>
 #include <raymath.h>
@@ -13,8 +17,6 @@ namespace raylib {
 #include <assimp/Importer.hpp>
 
 // #if defined(PLATFORM_DESKTOP)
-#define GLSL_VERSION            330
-    #define GRAPHICS_API_OPENGL_33
 // #else   // PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
 //     #define GLSL_VERSION            100
 // #endif
@@ -35,7 +37,7 @@ class VisualizerBase {
     Shader shader;
     Light lights[MAX_LIGHTS];
 
-    aligned_vector<AdjointSE3<double>> ATs;
+    aligned_vector<Pose<double>> ATs;
 
      public:
     VisualizerBase(std::string robotUrdf, size_t screenWidth= 800, size_t screenHeight= 450,
@@ -95,7 +97,7 @@ class VisualizerBase {
             link.texcoords= (float *) RL_CALLOC(link.vertexCount * 2, sizeof(float));
             link.normals= (float *) RL_CALLOC(link.vertexCount * 3, sizeof(float));
             link.indices= (unsigned short *) RL_MALLOC(link.triangleCount * 3 * sizeof(unsigned short));
-
+            std::cout<<"VERTEX COUNT "<<link.vertexCount<<std::endl;
             for(size_t i= 0; i < link.vertexCount; i++) {
                 link.vertices[i * 3]= verticies(i, 0);
                 link.vertices[i * 3 + 1]= verticies(i, 1);
@@ -105,7 +107,7 @@ class VisualizerBase {
                 link.normals[i * 3 + 2]= normals[i][2];
                 link.texcoords[i * 2 + 0]= 0; // normals[i][0];
                 link.texcoords[i * 2 + 1]= 0; // normals[i][1];
-            }
+            } std::cout<<"TRIANGLE COUNT "<<link.triangleCount<<std::endl;
             for(size_t i= 0; i < link.triangleCount; i++) {
                 link.indices[i * 3]= tris[i][0];
                 link.indices[i * 3 + 1]= tris[i][1];
@@ -113,6 +115,7 @@ class VisualizerBase {
             }
             RobotLinks.push_back(LoadModelFromMesh(link));
             RobotLinks.back().transform= MatrixIdentity();
+            std::cout<<"Meshes "<<RobotLinks.back().meshCount<<std::endl;
             rlLoadMesh(&RobotLinks.back().meshes[0], false);
 
         }
@@ -125,8 +128,8 @@ class VisualizerBase {
         kin->getBodyAdjointsOptim(ATs, true);
 
         shader= LoadShader(
-            "/home/joshua/ssd/Projects/Projects/PhD/ARDL_ws/src/ARDL/tests/Collision/Shaders/basic_lighting.vs",
-            "/home/joshua/ssd/Projects/Projects/PhD/ARDL_ws/src/ARDL/tests/Collision/Shaders/basic_lighting.fs");
+            "/home/joshua/NewProject/PhD/ARDL_ws/src/ARDL/tests/Collision/Shaders/basic_lighting.vs",
+            "/home/joshua/NewProject/PhD/ARDL_ws/src/ARDL/tests/Collision/Shaders/basic_lighting.fs");
         shader.locs[LOC_MATRIX_MODEL]= GetShaderLocation(shader, "matModel");
         shader.locs[LOC_VECTOR_VIEW]= GetShaderLocation(shader, "viewPos");
         int ambientLoc= GetShaderLocation(shader, "ambient");

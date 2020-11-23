@@ -21,6 +21,29 @@ using namespace pagmo;
 using namespace ARDL::Model;
 using namespace ARDL;
 using namespace ARDL::Math;
+
+namespace Eigen{
+template<class Matrix>
+void write_binary(const char* filename, const Matrix& matrix){
+    std::ofstream out(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+    typename Matrix::Index rows=matrix.rows(), cols=matrix.cols();
+    out.write((char*) (&rows), sizeof(typename Matrix::Index));
+    out.write((char*) (&cols), sizeof(typename Matrix::Index));
+    out.write((char*) matrix.data(), rows*cols*sizeof(typename Matrix::Scalar) );
+    out.close();
+}
+template<class Matrix>
+void read_binary(const char* filename, Matrix& matrix){
+    std::ifstream in(filename, std::ios::in | std::ios::binary);
+    typename Matrix::Index rows=0, cols=0;
+    in.read((char*) (&rows),sizeof(typename Matrix::Index));
+    in.read((char*) (&cols),sizeof(typename Matrix::Index));
+    matrix.resize(rows, cols);
+    in.read( (char *) matrix.data() , rows*cols*sizeof(typename Matrix::Scalar) );
+    in.close();
+}
+} // Eigen::
+
 class PAGMO_DLL_PUBLIC MFTOptimizer {
      public:
     int copies= 0;
@@ -44,8 +67,13 @@ class PAGMO_DLL_PUBLIC MFTOptimizer {
         robot= std::shared_ptr<Chain<double>>(new Chain<double>(roboturdf));
         kin= std::shared_ptr<ForwardKinematics<double>>(new ForwardKinematics<double>(robot));
         dyn= std::shared_ptr<Dynamics<double>>(new Dynamics<double>(robot));
+        if(ifstream("regressorMatrix.dat").good()){
+            Eigen::read_binary("regressorMatrix.dat",regressorProjector);
+            dyn->setRegressorProjector(regressorProjector);
+        }else{
         dyn->calcBaseProjection(50000, 5, 1e-10);
         regressorProjector= dyn->getRegressorProjector();
+        }
         dof= robot->getNumOfJoints();
 
         MFT= std::shared_ptr<ModifiedFourierTrajectory<double>>(
@@ -218,8 +246,8 @@ Eigen::VectorXd q(dof);
         Eigen::VectorXd q, qd, qdd;
         Eigen::MatrixXd FK, linkPoses, regressor, rrt;
         std::shared_ptr<TrajectoryStorage<double>> simulated;
-        aligned_vector<AdjointSE3<double>> adjoints, linkAdjoints;
-        aligned_vector<LieBracketSE3<double>> lbSE3;
+        aligned_vector<Pose<double>> adjoints, linkAdjoints;
+        aligned_vector<Motion<double>> lbSE3;
         aligned_vector<Jacobian<double>> jacobians, jacobianDots;
         Regressor<double> t_regressor;
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> saes;

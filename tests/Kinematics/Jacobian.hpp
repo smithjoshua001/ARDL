@@ -1,5 +1,6 @@
 #pragma once
 // #define EIGEN_USE_BLAS ON
+#include <pinocchio/multibody/fwd.hpp>
 #define EIGEN_RUNTIME_NO_MALLOC ON
 // #define ARDL_NO_VARIANT ON
 #include "robotTestMain.cpp"
@@ -30,7 +31,7 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
     qdd.setZero();
     randomJointState(q, qd, qdd);
 
-    aligned_vector<AdjointSE3<double>> adjoints;
+    aligned_vector<Pose<double>> adjoints;
     adjoints.resize(c->getNumOfJoints() + 1);
 
     size_t dof= c->getNumOfJoints();
@@ -50,11 +51,12 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
         jacobianDotsP[i].setZero();
     }
 
-    aligned_vector<LieBracketSE3<double>> adjs;
+    aligned_vector<Motion<double>> adjs;
     adjs.resize(c->getNumOfJoints());
 
     ARDL::Dynamics<double> dyn(c);
     constexpr ARDL::Frame frame= ARDL::Frame::BODY;
+    pinocchio::ReferenceFrame pinFrame;
     c->updateChain(q, qd);
     c->updateMatrices();
     if constexpr(frame == ARDL::Frame::SPATIAL) {
@@ -68,8 +70,10 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
     }
     c->updateMatricesOptim();
     if constexpr(frame == ARDL::Frame::SPATIAL) {
+        pinFrame = pinocchio::ReferenceFrame::WORLD;
         fk->getAdjointsOptim(adjoints);
     } else if constexpr(frame == ARDL::Frame::BODY) {
+        pinFrame = pinocchio::ReferenceFrame::LOCAL;
         fk->getBodyAdjointsOptim(adjoints);
     }
     for(size_t i= 0; i < adjoints.size(); i++) {
@@ -85,7 +89,7 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
     pinocchio::computeJointJacobians(pModel, pData);
     pinocchio::computeJointJacobians(pModel, pData);
     for(size_t i= 0; i < dof; i++) {
-        pinocchio::getJointJacobian(pModel, pData, i + 1, pinocchio::WORLD, jacobiansP[i]);
+        pinocchio::getJointJacobian(pModel, pData, i + 1, pinFrame, jacobiansP[i]);
     }
     std::cout<<"ARDL \n"<<jacobians[0]<<std::endl<<std::endl;
     std::cout<<"PIN \n"<<jacobiansP[0]<<std::endl<<std::endl;
@@ -104,8 +108,17 @@ TEST_CASE("Jacobian Test", "[adjoint][kinematics]") {
     std::cout<<"ARDL \n"<<jacobians[6]<<std::endl<<std::endl;
     std::cout<<"PIN \n"<<jacobiansP[6]<<std::endl<<std::endl;
     for(size_t i= 0; i < dof; i++) { checkApproxMatrix(jacobians[i], jacobiansP[i], 1e-6); }
-pinocchio::getFrameJacobian(pModel, pData, pModel.frames.size()-1, pinocchio::WORLD, jacobiansP[6]);
+pinocchio::getFrameJacobian(pModel, pData, pModel.frames.size()-1, pinFrame, jacobiansP[6]);
     std::cout<<"PIN \n"<<jacobiansP[6]<<std::endl<<std::endl;
+    ARDL::Jacobian<double> ee;
+    ee.resize(c->getNumOfJoints());
+    fk->getEEJacobian<frame>(jacobians,ee);
+    std::cout<<"ARDL \n"<<ee<<std::endl<<std::endl;
+pinocchio::getFrameJacobian(pModel, pData, pModel.frames.size()-1, pinocchio::ReferenceFrame::LOCAL, jacobiansP[6]);
+    std::cout<<"PIN \n"<<jacobiansP[6]<<std::endl<<std::endl;
+
+    pinocchio::computeJointJacobian(pModel,pData,q,7,jacobiansP[6]);
+    std::cout<<"PIN SAN \n"<<jacobiansP[6]<<std::endl<<std::endl;
 }
 
 TEST_CASE("JD1", "[adjoint][kinematics]") {
@@ -127,7 +140,7 @@ TEST_CASE("JD1", "[adjoint][kinematics]") {
     qdd.setZero();
     randomJointState(q, qd, qdd);
 
-    aligned_vector<AdjointSE3<double>> adjoints;
+    aligned_vector<Pose<double>> adjoints;
     adjoints.resize(c->getNumOfJoints() + 1);
 
     size_t dof= c->getNumOfJoints();
@@ -147,7 +160,7 @@ TEST_CASE("JD1", "[adjoint][kinematics]") {
         jacobianDotsP[i].setZero();
     }
 
-    aligned_vector<LieBracketSE3<double>> adjs;
+    aligned_vector<Motion<double>> adjs;
     adjs.resize(c->getNumOfJoints());
 
     ARDL::Dynamics<double> dyn(c);

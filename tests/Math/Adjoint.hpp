@@ -16,7 +16,7 @@ TEST_CASE("Initializations", "[adjoint][math]") {
         Eigen::Matrix3d R = createRotationMatrix(0.25 * M_PI, 0 * M_PI, 0 * M_PI);
         Eigen::Vector3d p;
         p << 0, 0, 0;
-        AdjointSE3<double> ad(R, p);
+        Pose<double> ad(R, p);
         checkApproxMatrix(ad.getR(), R);
     }
     SECTION("Y") {}
@@ -33,13 +33,13 @@ TEST_CASE("Adjoint applyInverseTo", "[adjoint][math]") {
         //Result
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
         Vector3d zero = Vector3d::Zero();
-        AdjointSE3<double> ad(R, p), adInv(R, p), result;
+        Pose<double> ad(R, p), adInv(R, p), result;
         adInv.applyInverseTo(ad, result);
         checkApproxMatrix(result.getR(), I, 1e-10);
         checkApproxMatrix(result.getP(), zero, 1e-10);
     }
     SECTION("Rotation Test") {
-        AdjointSE3<double> ad(R, p), ad2(R, p);
+        Pose<double> ad(R, p), ad2(R, p);
         Eigen::Matrix3d resR = createRotationMatrix(-0.5 * M_PI, 0, 0);
         Vector3d resP = Vector3d::Zero();
         ad.inverse();
@@ -52,7 +52,7 @@ TEST_CASE("Adjoint applyInverseTo", "[adjoint][math]") {
       p<<0.1,0.5,0;
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
         Vector3d zero = Vector3d::Zero();
-        AdjointSE3<double> ad(R, p), adInv(R, p), result;
+        Pose<double> ad(R, p), adInv(R, p), result;
         adInv.applyInverseTo(ad, result);
         std::cout<<result.getP().transpose()<<std::endl;
         checkApproxMatrix(result.getR(), I, 1e-10);
@@ -63,7 +63,7 @@ TEST_CASE("Adjoint applyInverseTo", "[adjoint][math]") {
       p<<0.1,0.5,0;
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
         Vector3d zero = Vector3d::Zero();
-        AdjointSE3<double> ad(R, p), adInv(R, p), result;
+        Pose<double> ad(R, p), adInv(R, p), result;
         adInv.inverse();
         adInv.applyTo(ad, result);
         std::cout<<result.getP().transpose()<<std::endl;
@@ -75,7 +75,7 @@ TEST_CASE("Adjoint applyInverseTo", "[adjoint][math]") {
       p<<0.1,0.5,0;
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
         Vector3d zero = Vector3d::Zero();
-        AdjointSE3<double> ad(R, p), adInv(R, p), result;
+        Pose<double> ad(R, p), adInv(R, p), result;
         adInv.applyInverse(ad, result);
         std::cout<<result.getP().transpose()<<std::endl;
         checkApproxMatrix(result.getR(), I, 1e-10);
@@ -86,7 +86,7 @@ TEST_CASE("Adjoint applyInverseTo", "[adjoint][math]") {
       p<<0.1,0.5,0;
         Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
         Vector3d zero = Vector3d::Zero();
-        AdjointSE3<double> ad(R, p), adInv(R, p);
+        Pose<double> ad(R, p), adInv(R, p);
         adInv.inverse();
         Eigen::Matrix<double,6,6> result = ad.getMatrix()*adInv.getMatrix();
         Eigen::Matrix<double,6,6> iden;
@@ -104,7 +104,7 @@ TEST_CASE("Adjoint apply", "[adjoint][math]") {
     //Result
     Eigen::Matrix3d resR = createRotationMatrix(0.5 * M_PI, 0, 0);
     Vector3d resP = Vector3d::Zero();
-    AdjointSE3<double> ad(R, p), ad2(R, p);
+    Pose<double> ad(R, p), ad2(R, p);
     ad.apply(ad2);
     checkApproxMatrix(ad.getR(), resR, 1e-10);
     checkApproxMatrix(ad.getP(), resP, 1e-10);
@@ -118,7 +118,7 @@ TEST_CASE("Adjoint inverse", "[adjoint][math]") {
     //Result
     Eigen::Matrix3d resR = createRotationMatrix(-0.5 * M_PI, 0, 0);
     Vector3d resP = Vector3d::Zero();
-    AdjointSE3<double> ad(R, p);
+    Pose<double> ad(R, p);
     ad.inverse();
     checkApproxMatrix(ad.getR(), resR, 1e-10);
     checkApproxMatrix(ad.getP(), resP, 1e-10);

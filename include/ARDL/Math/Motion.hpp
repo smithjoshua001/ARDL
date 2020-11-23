@@ -13,7 +13,7 @@ namespace ARDL {
          * @tparam T Base type
          */
         template<typename T>
-        class LieBracketSE3 {
+        class Motion {
              private:
             /**
              * @brief Velocity vector
@@ -31,18 +31,18 @@ namespace ARDL {
             mutable Eigen::Matrix<T, 3, 3> mt_skew;
 
              public:
-            constexpr LieBracketSE3() {
+            constexpr Motion() {
                 m_velocity= Eigen::Matrix<T, 6, 1>::Zero();
                 m_matrix= Eigen::Matrix<T, 6, 6>::Zero();
             }
             template<typename VectorD>
-            LieBracketSE3(const Eigen::MatrixBase<VectorD> &velocity) {
+            Motion(const Eigen::MatrixBase<VectorD> &velocity) {
                 cache= false;
                 m_velocity= velocity;
                 calcMatrix();
             }
 
-            LieBracketSE3 &operator=(const LieBracketSE3 &in) {
+            Motion &operator=(const Motion &in) {
                 cache= false;
                 this->m_velocity= in.getVelocityConst();
                 return *this;
@@ -157,7 +157,7 @@ namespace ARDL {
                 const_cast<Eigen::MatrixBase<Derived2> &>(out)= buffer;
             }
 
-            // void applyTo(LieBracketSE3 &trans, LieBracketSE3 &out) {
+            // void applyTo(Motion &trans, Motion &out) {
             //     // out.m_P = m_P + this->m_R * trans.m_P;
             //     // out.m_R = this->m_R * trans.m_R;
             // }

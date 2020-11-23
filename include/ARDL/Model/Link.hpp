@@ -206,7 +206,7 @@ namespace ARDL {
                         std::vector<Matrix<T, 3, 1>> ps;
                         std::vector<fcl::Triangle> ts;
 
-                        AdjointSE3 transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
+                        Pose transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
                         fcl::Transform3<T> t_collisionOffset;
                         t_collisionOffset.translation()= transform.getP();
                         t_collisionOffset.linear()= transform.getR();
@@ -254,7 +254,7 @@ namespace ARDL {
                         m_inertialParameters[11]= T(ARDL_visit(*m_parentJoint_p, getStaticFriction()));
                     }
                     if(ARDL_visit(*m_parentJoint_p, isFixed()) && !m_parentLink_p->isRoot()) {
-                        AdjointSE3<T> t_fixedTransform= ARDL_visit(*m_parentJoint_p, getOriginTransform());
+                        Pose<T> t_fixedTransform= ARDL_visit(*m_parentJoint_p, getOriginTransform());
                         Link<T> *parentL= m_parentLink_p;
                         while(ARDL_visit(*(parentL->m_parentJoint_p), isFixed())) {
                             t_fixedTransform.apply(ARDL_visit(*(parentL->m_parentJoint_p), getOriginTransform()));
@@ -285,7 +285,7 @@ namespace ARDL {
                     //         ts.push_back(m_collisionModel_sp->tri_indices[i]);
                     //     }
 
-                    //     AdjointSE3 transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
+                    //     Pose transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
                     //     transform.inverse();
                     //     fcl::Transform3<T> t_collisionOffset;
                     //     t_collisionOffset.translation()= transform.getP();
@@ -453,17 +453,17 @@ namespace ARDL {
                 }
             }
 
-            void updateCollision(const AdjointSE3<T> &at) {
+            void updateCollision(const Pose<T> &at) {
                 if(m_hasCollision) { updateCollision_us(at); }
             }
-            void updateCollision_us(const AdjointSE3<T> &at) {
+            void updateCollision_us(const Pose<T> &at) {
                 m_collisionObject_sp->setTranslation(at.getP().template cast<T>());
                 m_collisionObject_sp->setRotation(at.getR().template cast<T>());
             }
-            void updateCollisionOptim(const AdjointSE3<T> &at) {
+            void updateCollisionOptim(const Pose<T> &at) {
                 if(m_hasCollision) { updateCollisionOptim_us(at); }
             }
-            void updateCollisionOptim_us(const AdjointSE3<T> &at) {
+            void updateCollisionOptim_us(const Pose<T> &at) {
                 m_collisionObjectOptimal_sp->setTranslation(at.getP().template cast<T>());
                 m_collisionObjectOptimal_sp->setRotation(at.getR().template cast<T>());
             }

@@ -6,8 +6,8 @@
 #include <variant>
 
 #include "ARDL/Util/Logger.hpp"
-#include "ARDL/Math/AdjointSE3.hpp"
-#include "ARDL/Math/LieBracketSE3.hpp"
+#include "ARDL/Math/Pose.hpp"
+#include "ARDL/Math/Motion.hpp"
 #include "ARDL/Util/Random.hpp"
 #include "ARDL/typedefs.hpp"
 
@@ -36,18 +36,18 @@ namespace ARDL {
 #if !ARDL_EXTERNAL_DATA
             Eigen::Matrix<T, 6, 1> m_s;
             // Optimized Transform to origin
-            AdjointSE3<T> m_optimOriginTransform;
+            Pose<T> m_optimOriginTransform;
 
             // transform to origin
-            AdjointSE3<T> m_originTransform;
+            Pose<T> m_originTransform;
             // transform from origin to end of joint
-            AdjointSE3<T> m_jointTransform;
+            Pose<T> m_jointTransform;
 
             // Velocity of Joint
-            LieBracketSE3<T> m_adjPK;
+            Motion<T> m_adjPK;
 
             // Transformation of Joint
-            AdjointSE3<T> m_adPK, m_adPKOptim;
+            Pose<T> m_adPK, m_adPKOptim;
 
             T m_staticFriction;
             T m_viscousFriction;
@@ -60,18 +60,18 @@ namespace ARDL {
 #else
             Eigen::Matrix<T, 6, 1> &m_s;
             // Optimized Transform to origin
-            AdjointSE3<T> &m_optimOriginTransform;
+            Pose<T> &m_optimOriginTransform;
 
             // transform to origin
-            AdjointSE3<T> &m_originTransform;
+            Pose<T> &m_originTransform;
             // transform from origin to end of joint
-            AdjointSE3<T> &m_jointTransform;
+            Pose<T> &m_jointTransform;
 
             // Velocity of Joint
-            LieBracketSE3<T> &m_adjPK;
+            Motion<T> &m_adjPK;
 
             // Transformation of Joint
-            AdjointSE3<T> &m_adPK, &m_adPKOptim;
+            Pose<T> &m_adPK, &m_adPKOptim;
 
             T &m_staticFriction;
             T &m_viscousFriction;
@@ -188,15 +188,15 @@ namespace ARDL {
             inline T getStaticFriction() { return m_staticFriction; }
             inline T getViscousFriction() { return m_viscousFriction; }
 
-            inline void setFixedTransform(AdjointSE3<T> &trans) { m_originTransform= trans; }
+            inline void setFixedTransform(Pose<T> &trans) { m_originTransform= trans; }
 
-            inline AdjointSE3<T> const &getOriginTransform() const { return m_originTransform; }
+            inline Pose<T> const &getOriginTransform() const { return m_originTransform; }
 
-            inline AdjointSE3<T> &getAdjointLocal() { return m_adPK; }
+            inline Pose<T> &getAdjointLocal() { return m_adPK; }
 
-            inline AdjointSE3<T> &getOriginTransformRef() { return m_originTransform; }
-            inline void setOptimalFixedTransform(AdjointSE3<T> &trans) { m_optimOriginTransform= trans; }
-            inline AdjointSE3<T> & getOptimalTransformRef() { return m_optimOriginTransform; }
+            inline Pose<T> &getOriginTransformRef() { return m_originTransform; }
+            inline void setOptimalFixedTransform(Pose<T> &trans) { m_optimOriginTransform= trans; }
+            inline Pose<T> & getOptimalTransformRef() { return m_optimOriginTransform; }
 
             inline const Eigen::Matrix<T, 6, 1> &getS() const { return m_s; }
 
@@ -267,7 +267,7 @@ namespace ARDL {
 
             inline const Eigen::Matrix<T, 6, 6> &getAdjPK() const { return m_adjPK.getMatrix(); }
 
-            LieBracketSE3<T> &getAdjPKRef() { return m_adjPK; }
+            Motion<T> &getAdjPKRef() { return m_adjPK; }
 
             inline void update() {
                 if(!cache) { m_jointTransform.apply(m_originTransform, m_adPK); }

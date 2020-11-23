@@ -35,7 +35,7 @@ class VisualizerBase {
     Shader shader;
     Light lights[MAX_LIGHTS];
 
-    aligned_vector<AdjointSE3<double>> ATs;
+    aligned_vector<Pose<double>> ATs;
 
      public:
     VisualizerBase(std::string robotUrdf, size_t screenWidth= 800, size_t screenHeight= 450,
