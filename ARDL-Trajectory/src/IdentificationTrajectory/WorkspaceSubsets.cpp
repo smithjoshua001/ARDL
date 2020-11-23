@@ -1,4 +1,6 @@
 #include "ARDL/Kinematics/ForwardKinematics.hpp"
+#include "ARDL/Dynamics/Dynamics.hpp"
+
 
 #include "ARDL/Util/MatrixInitializer.hpp"
 #include "ARDL/Util/Pseudoinverse.hpp"
@@ -65,6 +67,29 @@ aligned_vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> separateCube(const E
     out.push_back({center, max});
     return out;
 }
+
+namespace Eigen{
+template<class Matrix>
+void write_binary(const char* filename, const Matrix& matrix){
+    std::ofstream out(filename, std::ios::out | std::ios::binary | std::ios::trunc);
+    typename Matrix::Index rows=matrix.rows(), cols=matrix.cols();
+    out.write((char*) (&rows), sizeof(typename Matrix::Index));
+    out.write((char*) (&cols), sizeof(typename Matrix::Index));
+    out.write((char*) matrix.data(), rows*cols*sizeof(typename Matrix::Scalar) );
+    out.close();
+}
+template<class Matrix>
+void read_binary(const char* filename, Matrix& matrix){
+    std::ifstream in(filename, std::ios::in | std::ios::binary);
+    typename Matrix::Index rows=0, cols=0;
+    in.read((char*) (&rows),sizeof(typename Matrix::Index));
+    in.read((char*) (&cols),sizeof(typename Matrix::Index));
+    matrix.resize(rows, cols);
+    in.read( (char *) matrix.data() , rows*cols*sizeof(typename Matrix::Scalar) );
+    in.close();
+}
+} // Eigen::
+
 int main(int argc, char **argv) {
     size_t samples= 500000;
     std::string urdf, templateJson, outputPath;
@@ -80,16 +105,25 @@ int main(int argc, char **argv) {
     }
     if(argc > 5) { shiftscale= std::atof(argv[5]); }
 
-    Eigen::Vector3d minLimit(-2, -2, 0.2);
+    Eigen::Vector3d minLimit(-2, -2, 0.1);
 
     std::cout<<"URDF: "<<urdf<<std::endl;
     urdf= ARDL::Util::getModelFromGazeboPath(urdf);
     std::cout<<"URDF: "<<urdf<<std::endl;
     std::shared_ptr<Chain<double>> c;
     std::shared_ptr<ForwardKinematics<double>> fk;
+    std::shared_ptr<Dynamics<double>> dyn;
     c= std::shared_ptr<Chain<double>>(new Chain<double>(urdf));
     fk= std::shared_ptr<ForwardKinematics<double>>(new ForwardKinematics<double>(c));
-    aligned_vector<AdjointSE3<double>> adjoints;
+    dyn= std::shared_ptr<Dynamics<double>>(new Dynamics<double>(c));
+    dyn->calcBaseProjection(1000000, 4, 1e-4);
+    Eigen::MatrixXd regressorProjector= dyn->getRegressorProjector();
+    // std::cout<<regressorProjector<<std::endl;
+    // exit(-1);
+    Eigen::write_binary("regressorMatrix.dat",regressorProjector);
+
+
+    aligned_vector<Pose<double>> adjoints;
     adjoints.resize(c->getNumOfJoints() + 1);
     Eigen::Matrix<double, -1, 3> posEE;
     posEE.resize(samples, 3);

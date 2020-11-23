@@ -4,8 +4,8 @@
 #include <Eigen/Geometry>
 #include "ARDL/typedefs.hpp"
 #include "ARDL/Util/Math.hpp"
-#include "ARDL/Math/AdjointSE3.hpp"
-// #include "ARDL/Math/LieBracketSE3.hpp"
+#include "ARDL/Math/Pose.hpp"
+// #include "ARDL/Math/Motion.hpp"
 using namespace std;
 using namespace Eigen;
 namespace ARDL {
@@ -104,7 +104,7 @@ namespace ARDL {
                 const_cast<Eigen::MatrixBase<D> &>(out)(8)= inertia(0, 2);
                 const_cast<Eigen::MatrixBase<D> &>(out)(9)= inertia(1, 2);
             }
-            void applyXIX(const AdjointSE3<T> &trans) {
+            void applyXIX(const Pose<T> &trans) {
                 // h
                 mt_skewR.col(0)= momentMass;
                 // R^T h
@@ -135,7 +135,7 @@ namespace ARDL {
                 inertia.noalias()+= mt_skewR * mt_skewP;
 
             }
-            void applyInverseXIX(const AdjointSE3<T> &trans) {
+            void applyInverseXIX(const Pose<T> &trans) {
                 // R = RT
                 // p = - RT p
                 // h

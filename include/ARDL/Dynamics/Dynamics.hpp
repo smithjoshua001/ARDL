@@ -21,7 +21,7 @@ namespace ARDL {
 
         Gravity<T> m_gravity, mt_gravity;
 
-        LieBracketSE3<T> mt_bodyVelocity, mt_tempVelocity;
+        Motion<T> mt_bodyVelocity, mt_tempVelocity;
 
         LinkRegressor<T> mt_momentumRegressor, mt_momentumRegressor2, mt_momentumRegressor3;
 
@@ -35,7 +35,7 @@ namespace ARDL {
         Eigen::Matrix<T, 6, 6> mt_6x6_1, mt_6x6_2, mt_6x6_3;
 
         SpatialInertia<T> mt_sI;
-        AdjointSE3<T> mt_accumulatorGlobal;
+        Pose<T> mt_accumulatorGlobal;
 
          public:
         /**
@@ -109,7 +109,7 @@ namespace ARDL {
          * @param M Inertia matrix
          */
         template<Frame OF= Frame::BODY, typename InertiaD>
-        void calcJointInertiaMatrix(const aligned_vector<AdjointSE3<T>> Ads,
+        void calcJointInertiaMatrix(const aligned_vector<Pose<T>> Ads,
                                     const aligned_vector<Jacobian<T>> &jacobians,
                                     Eigen::MatrixBase<InertiaD> const &M) {
             size_t i= 0;
@@ -133,7 +133,7 @@ namespace ARDL {
          * @param M Inertia matrix
          */
         template<Frame OF= Frame::BODY, typename InertiaD>
-        void calcJointInertiaMatrixOptim(const aligned_vector<AdjointSE3<T>> Ads,
+        void calcJointInertiaMatrixOptim(const aligned_vector<Pose<T>> Ads,
                                          const aligned_vector<Jacobian<T>> &jacobians,
                                          Eigen::MatrixBase<InertiaD> const &M) {
             const_cast<Eigen::MatrixBase<InertiaD> &>(M).setZero();
@@ -156,7 +156,7 @@ namespace ARDL {
          */
         template<Frame OF= Frame::BODY, typename Derived>
         void calcCoriolisMatrix(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
-                                aligned_vector<LieBracketSE3<T>> &lbSE3, aligned_vector<AdjointSE3<T>> &Ads,
+                                aligned_vector<Motion<T>> &lbSE3, aligned_vector<Pose<T>> &Ads,
                                 Eigen::MatrixBase<Derived> const &C) {
             const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
             size_t i= 0;
@@ -215,7 +215,7 @@ namespace ARDL {
          */
         template<Frame OF= Frame::BODY, typename Derived>
         void calcCoriolisMatrixOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
-                                     aligned_vector<LieBracketSE3<T>> &lbSE3, aligned_vector<AdjointSE3<T>> &Ads,
+                                     aligned_vector<Motion<T>> &lbSE3, aligned_vector<Pose<T>> &Ads,
                                      Eigen::MatrixBase<Derived> const &C) {
             const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
             for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
@@ -247,7 +247,7 @@ namespace ARDL {
          * @param G Output gravity vector
          */
         template<Frame OF= Frame::BODY, typename Derived>
-        void calcGravityVector(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<AdjointSE3<T>> &Ads,
+        void calcGravityVector(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &Ads,
                                Eigen::MatrixBase<Derived> const &G) {
             const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
             size_t i= 0;
@@ -279,7 +279,7 @@ namespace ARDL {
          * @param G Output gravity vector
          */
         template<Frame OF= Frame::BODY, typename Derived>
-        void calcGravityVectorOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<AdjointSE3<T>> &Ads,
+        void calcGravityVectorOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &Ads,
                                     Eigen::MatrixBase<Derived> const &G) {
             const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
             if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
@@ -300,12 +300,12 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY, typename RD, typename JD>
-        void calcRegressor(const Eigen::MatrixBase<JD> &qdd, const aligned_vector<AdjointSE3<T>> &Ads,
-                           aligned_vector<LieBracketSE3<T>> &adjs, const aligned_vector<Jacobian<T>> &jacs,
+        void calcRegressor(const Eigen::MatrixBase<JD> &qdd, const aligned_vector<Pose<T>> &Ads,
+                           aligned_vector<Motion<T>> &adjs, const aligned_vector<Jacobian<T>> &jacs,
                            const aligned_vector<Jacobian<T>> &jDs, Eigen::MatrixBase<RD> const &out) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
             Matrix<T, 6, 1> mt_gravity;
-            LieBracketSE3<T> mt_bodyVelocity;
+            Motion<T> mt_bodyVelocity;
             LinkRegressor<T> mt_momentumRegressor, mt_momentumRegressor2;
             mt_momentumRegressor.setZero();
             mt_momentumRegressor2.setZero();
@@ -330,12 +330,12 @@ namespace ARDL {
 
         template<Frame OF= Frame::BODY, typename RD, typename JD, typename JD2>
         void calcSlotineLiRegressor(const Eigen::MatrixBase<JD> &qd, const Eigen::MatrixBase<JD2> &qdd,
-                                    const aligned_vector<AdjointSE3<T>> &Ads, aligned_vector<LieBracketSE3<T>> &adjs,
+                                    const aligned_vector<Pose<T>> &Ads, aligned_vector<Motion<T>> &adjs,
                                     const aligned_vector<Jacobian<T>> &jacs, const aligned_vector<Jacobian<T>> &jDs,
                                     Eigen::MatrixBase<RD> const &out) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
             Eigen::Matrix<T, 6, 1> mt_gravity;
-            LieBracketSE3<T> mt_bodyVelocity;
+            Motion<T> mt_bodyVelocity;
             Eigen::Matrix<T, 6, 10> mt_momentumRegressor, mt_momentumRegressor2, mt_momentumRegressor3;
             mt_momentumRegressor.setZero();
             mt_momentumRegressor2.setZero();
@@ -362,8 +362,8 @@ namespace ARDL {
         template<typename RegressorD, typename JointD>
         void initFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
                                             const aligned_vector<Jacobian<T>> &jacobianDots,
-                                            const aligned_vector<LieBracketSE3<T>> &lbSE3,
-                                            const aligned_vector<AdjointSE3<T>> &Ads,
+                                            const aligned_vector<Motion<T>> &lbSE3,
+                                            const aligned_vector<Pose<T>> &Ads,
                                             const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
                                             Eigen::MatrixBase<RegressorD> const &out) {
             const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
@@ -408,8 +408,8 @@ namespace ARDL {
         template<typename RegressorD, typename JointD>
         void computeFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
                                                const aligned_vector<Jacobian<T>> &jacobianDots,
-                                               const aligned_vector<LieBracketSE3<T>> &lbSE3,
-                                               const aligned_vector<AdjointSE3<T>> &Ads,
+                                               const aligned_vector<Motion<T>> &lbSE3,
+                                               const aligned_vector<Pose<T>> &Ads,
                                                const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
                                                Eigen::MatrixBase<RegressorD> const &out) {
             const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
@@ -457,8 +457,8 @@ namespace ARDL {
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> R(10 * m_chain->getNumOfJoints(),
                                                                10 * m_chain->getNumOfJoints());
             ForwardKinematics<T> fk(m_chain);
-            aligned_vector<AdjointSE3<T>> Ads(m_chain->getNumOfJoints() + 1);
-            aligned_vector<LieBracketSE3<T>> lbSE3(m_chain->getNumOfJoints());
+            aligned_vector<Pose<T>> Ads(m_chain->getNumOfJoints() + 1);
+            aligned_vector<Motion<T>> lbSE3(m_chain->getNumOfJoints());
             aligned_vector<Jacobian<T>> jacobians, jacobianDots;
 
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> regressors(m_chain->getNumOfJoints(),
@@ -562,6 +562,8 @@ namespace ARDL {
         }
 
         const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getRegressorProjector() { return m_projRegressor; }
+
+        void setRegressorProjector(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>& in) { m_projRegressor = in; m_baseParamNo = in.cols(); }
         const Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &getParameterProjector() { return m_projParameters; }
         const size_t &getNumOfBaseParams() { return m_baseParamNo; }
 
@@ -571,7 +573,7 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY>
-        void calcJointInertiaMatrixDq(const aligned_vector<AdjointSE3<T>> Ads,
+        void calcJointInertiaMatrixDq(const aligned_vector<Pose<T>> Ads,
                                       const aligned_vector<Jacobian<T>> &jacobians,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                       aligned_vector<MatrixX<T>> &M) {
@@ -599,7 +601,7 @@ namespace ARDL {
         }
         // TODO optimize
         template<Frame OF= Frame::BODY>
-        void calcCoriolisMatrixDq(aligned_vector<LieBracketSE3<T>> &lbSE3, const aligned_vector<Jacobian<T>> &jacobians,
+        void calcCoriolisMatrixDq(aligned_vector<Motion<T>> &lbSE3, const aligned_vector<Jacobian<T>> &jacobians,
                                   aligned_vector<Jacobian<T>> &jacobianDots,
                                   const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                   const aligned_vector<aligned_vector<Jacobian<T>>> &jacobianDotsDq,
@@ -690,7 +692,7 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY, int j>
-        void calcGravityVectorDq(const aligned_vector<AdjointSE3<T>> Ads, const aligned_vector<Jacobian<T>> &jacobians,
+        void calcGravityVectorDq(const aligned_vector<Pose<T>> Ads, const aligned_vector<Jacobian<T>> &jacobians,
                                  const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                  aligned_vector<Eigen::Matrix<T, j, 1>> &G) {
             for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) { G[i1].setZero(); }
@@ -723,7 +725,7 @@ namespace ARDL {
                                       const aligned_vector<Jacobian<T>> &jacDots,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacsDq,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacDotsDq,
-                                      aligned_vector<LieBracketSE3<T>> &adjs, const aligned_vector<AdjointSE3<T>> &Ads,
+                                      aligned_vector<Motion<T>> &adjs, const aligned_vector<Pose<T>> &Ads,
                                       const Eigen::MatrixBase<JointD> &qd, const Eigen::MatrixBase<JointD> &qdd,
                                       aligned_vector<Regressor<T>> &regressorsDq) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
@@ -802,7 +804,7 @@ namespace ARDL {
         void calcSlotineLiRegressorDqd(const aligned_vector<Jacobian<T>> &jacobians,
                                        const aligned_vector<Jacobian<T>> &jacobianDots,
                                        const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
-                                       const aligned_vector<LieBracketSE3<T>> &lbSE3,
+                                       const aligned_vector<Motion<T>> &lbSE3,
                                        const Eigen::MatrixBase<JointD> &qd,
                                        aligned_vector<Regressor<T>> &regressorsDq) {
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {

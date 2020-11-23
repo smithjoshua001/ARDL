@@ -12,10 +12,10 @@
 //         public:
 //             template <typename Exp> inline void operator()(LieExpression<Exp> &out) const {
 //                 std::cout << "Operator LieExpression" << std::endl;
-//                 if constexpr (std::is_same<Exp1, AdjointSE3>) {
+//                 if constexpr (std::is_same<Exp1, Pose>) {
 //                     right(out);
 //                     left.apply(out, out);
-//                 } else if constexpr (std::is_same<Exp2, AdjointSE3>) {
+//                 } else if constexpr (std::is_same<Exp2, Pose>) {
 //                     left(out);
 //                     right.applyTo(out, out);
 //                 } else {

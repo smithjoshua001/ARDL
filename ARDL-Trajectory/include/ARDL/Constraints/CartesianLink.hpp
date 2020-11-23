@@ -7,12 +7,12 @@ namespace ARDL {
     namespace Constraints {
         template <typename T> class CartesianLink : public Constraint<T, CartesianLink<T> > {
         protected:
-            const aligned_vector<AdjointSE3<T> > &m_adjoints_r;
+            const aligned_vector<Pose<T> > &m_adjoints_r;
             Eigen::Matrix<T, 3, Eigen::Dynamic> m_minLinks, m_maxLinks;
 
         public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-            template <typename Derived> CartesianLink(std::shared_ptr<Chain<T> > model, const aligned_vector<AdjointSE3<T> > &adjoints, const Eigen::MatrixBase<Derived> &min, const Eigen::MatrixBase<Derived> &max) : Constraint<T, CartesianLink<T> >(adjoints.size() * 3 * 2, model), m_adjoints_r(adjoints) {
+            template <typename Derived> CartesianLink(std::shared_ptr<Chain<T> > model, const aligned_vector<Pose<T> > &adjoints, const Eigen::MatrixBase<Derived> &min, const Eigen::MatrixBase<Derived> &max) : Constraint<T, CartesianLink<T> >(adjoints.size() * 3 * 2, model), m_adjoints_r(adjoints) {
                 // m_adjoints_r = adjoints;
                 m_minLinks = min;
                 m_maxLinks = max;

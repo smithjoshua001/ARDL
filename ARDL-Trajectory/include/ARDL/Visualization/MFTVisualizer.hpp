@@ -14,7 +14,7 @@ private:
     Eigen::VectorXd q;
     size_t samples;
 
-    aligned_vector<AdjointSE3<double> > end_effector_poses;
+    aligned_vector<Pose<double> > end_effector_poses;
     raylib::Vector3 p0, p1;
 
 public:
@@ -26,7 +26,7 @@ public:
         q.resize(robot->getNumOfJoints());
         samples = MFT->getPeriodLength() * 20;
         end_effector_poses.resize(samples);
-        AdjointSE3<double> ee;
+        Pose<double> ee;
         for (size_t i = 0; i < samples; i++) {
             MFT->update(i / 20.0);
             robot->updateChain(MFT->getPosition(), MFT->getVelocity());
@@ -44,7 +44,7 @@ public:
 
         std::cout << "SAMPLES: " << samples << std::endl;
         end_effector_poses.resize(samples);
-        AdjointSE3<double> ee;
+        Pose<double> ee;
         for (size_t i = 0; i < samples; i++) {
             MFT->update(i / 20.0);
             robot->updateChain(MFT->getPosition(), MFT->getVelocity());

@@ -84,18 +84,18 @@ namespace ARDL {
         //---------------------Joint Data--------------------------
         aligned_vector<Eigen::Matrix<T, 6, 1>> s;
         // Optimized Transform to origin
-        aligned_vector<AdjointSE3<T>> optimOriginTransform;
+        aligned_vector<Pose<T>> optimOriginTransform;
 
         // transform to origin
-        aligned_vector<AdjointSE3<T>> originTransform;
+        aligned_vector<Pose<T>> originTransform;
         // transform from origin to end of joint
-        aligned_vector<AdjointSE3<T>> jointTransform;
+        aligned_vector<Pose<T>> jointTransform;
 
         // Velocity of Joint
-        aligned_vector<LieBracketSE3<T>> adjPK;
+        aligned_vector<Motion<T>> adjPK;
 
         // Transformation of Joint
-        aligned_vector<AdjointSE3<T>> adPK, adPKOptim;
+        aligned_vector<Pose<T>> adPK, adPKOptim;
 
         std::vector<T> staticFriction;
         std::vector<T> viscousFriction;
@@ -126,13 +126,13 @@ namespace ARDL {
         void addJoint(bool fixed, size_t dof){
             s.push_back(Eigen::Matrix<T, 6, 1>::Zero());
             // if(!fixed){
-            optimOriginTransform.push_back(AdjointSE3<T>());
-            adPKOptim.push_back(AdjointSE3<T>());
+            optimOriginTransform.push_back(Pose<T>());
+            adPKOptim.push_back(Pose<T>());
             // }
-            originTransform.push_back(AdjointSE3<T>());
-            jointTransform.push_back(AdjointSE3<T>());
-            adjPK.push_back(LieBracketSE3<T>());
-            adPK.push_back(AdjointSE3<T>());
+            originTransform.push_back(Pose<T>());
+            jointTransform.push_back(Pose<T>());
+            adjPK.push_back(Motion<T>());
+            adPK.push_back(Pose<T>());
             staticFriction.push_back(T(0));
             viscousFriction.push_back(T(0));
             qMin.push_back(VectorX<T>(dof));

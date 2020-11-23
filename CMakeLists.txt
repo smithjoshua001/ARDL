@@ -83,7 +83,7 @@ target_compile_definitions(${PROJECT_NAME} INTERFACE ARDL_VARIANT=${ARDL_VARIANT
 target_link_libraries(${CMAKE_PROJECT_NAME} INTERFACE ${DLIB_PATHS})
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-# add_subdirectory(tests)
+add_subdirectory(tests)
 
 check_header_update(${${CMAKE_PROJECT_NAME}_HEADERS})
 
@@ -143,7 +143,6 @@ install(FILES
     DESTINATION ${INSTALL_CONFIGDIR}
 )
 
-
 #Register package in user's package registry
 export(PACKAGE ${CMAKE_PROJECT_NAME})
  add_subdirectory(ARDL-NP)
@@ -152,6 +151,8 @@ export(PACKAGE ${CMAKE_PROJECT_NAME})
  add_subdirectory(ARDL-Examples)
 endif()
  add_dummy(DLIB_INCLUDES DLIB_PATHS DEFS)
+
+
 generate_compile_commands()
 
 
@@ -176,11 +177,11 @@ cppyy_add_bindings(
   LANGUAGE_STANDARD "17"
   GENERATE_OPTIONS "-D__PIC__;-Wno-macro-redefined;-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
   COMPILE_OPTIONS "-std=c++17;-O3;-march=native;-DARDL_VARIANT=${ARDL_VARIANT};-DARDL_SHARED_PTR=${ARDL_SHARED_PTR};-DARDL_EXTERNAL_DATA=$<BOOL:${ARDL_EXTERNAL_DATA}>"
-  INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;/usr/local/include/eigen3;/usr/local/include"
+  INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include;$ENV{PhD_IS}/ARDL_ws/install/include/eigen3;$ENV{PhD_IS}/ARDL_ws/install/include"
   LINK_LIBRARIES "fmt::fmt;${DLIB_PATHS}"
   H_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include"
   H_FILES "${${CMAKE_PROJECT_NAME}_HEADERS}"
-  # H_FILES "ARDL/Util/Math.hpp;ARDL/Math/AdjointSE3.hpp;ARDL/Math/SpatialInertia.hpp"
+  # H_FILES "ARDL/Util/Math.hpp;ARDL/Math/Pose.hpp;ARDL/Math/SpatialInertia.hpp"
 )
 message(STATUS "HEADERS ${${CMAKE_PROJECT_NAME}_HEADERS}")
 install(CODE "execute_process(COMMAND pip3 install ${PY_WHEEL_FILE})")

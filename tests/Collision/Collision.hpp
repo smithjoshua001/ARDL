@@ -40,7 +40,7 @@ size_t iters= 5000;
 //     std::cout << pModel.nq << std::endl;
 //     VectorX<T> q(dof), qd(dof), qdd(dof);
 
-//     aligned_vector<AdjointSE3<T>> adjoints;
+//     aligned_vector<Pose<T>> adjoints;
 //     adjoints.resize(dof + 1);
 
 //     q.setZero();
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
 
     VectorX<T> q(dof), qd(dof), qdd(dof);
 
-    aligned_vector<AdjointSE3<T>> adjoints;
+    aligned_vector<Pose<T>> adjoints;
     adjoints.resize(dof + 1);
 
     q.setZero();

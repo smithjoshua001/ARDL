@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ARDL/Math/AdjointSE3.hpp>
-#include <ARDL/Math/LieBracketSE3.hpp>
+#include <ARDL/Math/Pose.hpp>
+#include <ARDL/Math/Motion.hpp>
 #include <ARDL/Kinematics/ForwardKinematics.hpp>
 using namespace Eigen;
 using namespace ARDL;

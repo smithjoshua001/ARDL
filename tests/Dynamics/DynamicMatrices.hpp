@@ -38,8 +38,8 @@ TEST_CASE("Matrix Check", "[adjoint][kinematics]") {
     std::cout << pModel.nq << std::endl;
     VectorX<T> q(dof), qd(dof), qdd(dof);
 
-    aligned_vector<AdjointSE3<T>> adjoints;
-    aligned_vector<LieBracketSE3<T>> adjs;
+    aligned_vector<Pose<T>> adjoints;
+    aligned_vector<Motion<T>> adjs;
     aligned_vector<Jacobian<T>> jacobians, jacobianDots;
     aligned_vector<aligned_vector<Jacobian<T>>> jacobiansDq, jacobianDotsDq;
 

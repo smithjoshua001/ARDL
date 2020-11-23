@@ -12,7 +12,7 @@ private:
     Eigen::VectorXd q,qd;
 
     raylib::Vector3 p0, p1;
-    aligned_vector<AdjointSE3<double>> adjoints;
+    aligned_vector<Pose<double>> adjoints;
 
 public:
     RobotVis(std::string robotUrdf, size_t screenWidth = 800, size_t screenHeight = 450, std::string title = "RobotVis") : VisualizerBase(robotUrdf, screenWidth, screenHeight, title) {

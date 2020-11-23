@@ -16,7 +16,7 @@ using namespace ARDL;
 using namespace ARDL::Model;
 using namespace ARDL::Constraints;
 
-aligned_vector<AdjointSE3<double> > adjoints;
+aligned_vector<Pose<double> > adjoints;
 
 #define PBSTR "||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||"
 #define PBWIDTH 60
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
     std::shared_ptr<ForwardKinematics<double> > kin(new ForwardKinematics<double>(model));
     std::shared_ptr<Dynamics<double> > dyn = std::shared_ptr<Dynamics<double> >(new Dynamics<double>(model));
 
-    aligned_vector<LieBracketSE3<double> > lbSE3;
+    aligned_vector<Motion<double> > lbSE3;
     aligned_vector<Jacobian<double> > jacobians, jacobianDots;
     size_t dof = model->getNumOfJoints();
     lbSE3.resize(dof);
