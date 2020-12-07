@@ -1,5 +1,6 @@
 
 find_package(orocos_kdl REQUIRED)
+find_package(manif REQUIRED)
 pkg_search_module(KDL_Parser REQUIRED KDL_Parser)
 find_library(TinyXML NAMES tinyxml)
 pkg_search_module(RBDL rbdl)
@@ -16,7 +17,7 @@ set(CMAKE_MODULE_PATH "${newstring}")
 
 pkg_search_module(pinocchio REQUIRED pinocchio)
 
-generate_dependancies(pinocchio RBDL RBDL_URDFReader orocos_kdl KDL_Parser)
+generate_dependancies(pinocchio RBDL RBDL_URDFReader orocos_kdl KDL_Parser manif)
 
 
 

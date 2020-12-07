@@ -45,7 +45,7 @@ TEST_CASE("Jacobian Checking", "[adjoint][kinematics]") {
     c->updateChain(q, qd);
     c->updateMatrices();
 
-    aligned_vector<AdjointSE3<double> > adjoints;
+    aligned_vector<Pose<double> > adjoints;
     adjoints.resize(c->getNumOfJoints());
     fk->getAdjoints(adjoints);
 
@@ -116,7 +116,7 @@ TEST_CASE("Jacobian Checking", "[adjoint][kinematics]") {
 }
 
 TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
-    #if ARDL_VARIANT == ON
+    #if ARDL_VARIANT
         std::cout << "RUNNING VARIANTS!" << std::endl;
     #else
         std::cout << "NO VARIANTS!" << std::endl;
@@ -151,7 +151,7 @@ TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
     Eigen::MatrixXd invAdj;
     invAdj.resize(6, 6);
 
-    aligned_vector<AdjointSE3<double> > adjoints;
+    aligned_vector<Pose<double> > adjoints;
     adjoints.resize(c->getNumOfJoints());
 
     /******************KDL******************/
@@ -263,7 +263,7 @@ TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
     //     LOG_DEBUG_LEVEL3("ARDL JD {} {}", i, jacobianDots[i]);
     // }
 
-    AdjointSE3<double> t = adjoints.back();
+    Pose<double> t = adjoints.back();
     LOG_DEBUG_LEVEL3("ARDLOPTIM AD \n{}", adjoints.back());
     LOG_DEBUG_LEVEL3("ARDLOPTIM J \n{}", jacobians.back());
     LOG_DEBUG_LEVEL3("ARDL J \n{}", jacobians.back());
@@ -281,7 +281,7 @@ TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
     // jnt_to_jacdot->JntToJacDot(KDL_state, jacDot, chainKDL.getNrOfSegments());
     // jacDL = adjoints.back().getMatrix() * jacobians.back();
     // // fk->convertBodyToMixedJacobianDot(adjoints.back(), jacDL, jacobianDots.back(), jacDotDL);
-    // LieBracketSE3<double> mt_bodyVelocity;
+    // Motion<double> mt_bodyVelocity;
     // mt_bodyVelocity.getVelocity() = jacDL * qd;
     // mt_bodyVelocity.calcMatrix();
 
@@ -439,9 +439,9 @@ TEST_CASE("Jacobian Dot Checking", "[adjoint][kinematics]") {
     std::cout << std::endl;
     LOG_DEBUG_LEVEL3("Pinocchio J \n{}", J);
 
-    LieBracketSE3<double> tmp1;
+    Motion<double> tmp1;
     tmp1.getVelocity() << 1, 2, 3, 4, 5, 6;
-    LieBracketSE3<double> tmp2, tmp4;
+    Motion<double> tmp2, tmp4;
     tmp2.getVelocity() << 6, 5, 4, 3, 2, 1;
     // tmp4.getVelocity().template head<3>() = tmp1.getVelocity().template head<3>().template cross(tmp2.getVelocity().template head<3>());
     // tmp4.getVelocity().template head<3>() = tmp1.getVelocity().template tail<3>().template cross(tmp2.getVelocity().template head<3>()) + tmp1.getVelocity().template head<3>().cross(tmp2.getVelocity().template tail<3>());

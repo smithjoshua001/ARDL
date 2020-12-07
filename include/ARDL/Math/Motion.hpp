@@ -7,6 +7,8 @@
 
 namespace ARDL {
     namespace Math {
+
+template <typename T> class Pose;
         /**
          * @brief SE3 Lie Bracket Matrix (velocity SE3 Lie Group)
          *
@@ -89,30 +91,6 @@ namespace ARDL {
                     .template block<3, Eigen::Dynamic>(0, 0, 3, in.cols())
                     .noalias()+= mt_skew * in.template block<3, Eigen::Dynamic>(3, 0, 3, in.cols());
 
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).template block<3, -1>(0, 0, 3, in.cols()).noalias()=
-                //     -in.template block<3, -1>(3, 0, 3, in.cols()).colwise().cross(m_velocity.template head<3>());
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
-                //     -in.template block<3, -1>(0, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).template block<3, -1>(0, 0, 3, in.cols()).noalias()+=
-                //     out.template block<3, -1>(3, 0, 3, in.cols());
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
-                //     -in.template block<3, -1>(3, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(3).noalias() = m_velocity(4) *  in.row(5) - m_velocity(5)*in.row(4);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(4).noalias() = m_velocity(5) *  in.row(3) - m_velocity(3)*in.row(5);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(5).noalias() = m_velocity(3) *  in.row(4) - m_velocity(4)*in.row(3);
-
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(0).noalias() = m_velocity(4) *  in.row(2) - m_velocity(5)*in.row(1);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(1).noalias() = m_velocity(5) *  in.row(0) - m_velocity(3)*in.row(2);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(2).noalias() = m_velocity(3) *  in.row(1) - m_velocity(4)*in.row(0);
-
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(0).noalias() += m_velocity(1) *  in.row(5) - m_velocity(2)*in.row(4);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(1).noalias() += m_velocity(2) *  in.row(3) - m_velocity(0)*in.row(5);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(out).row(2).noalias() += m_velocity(0) *  in.row(4) - m_velocity(1)*in.row(3);
-
             }
 
             template<typename Derived, typename Derived2, typename Derived3>
@@ -130,37 +108,8 @@ namespace ARDL {
                 const_cast<Eigen::MatrixBase<Derived3> &>(buffer)
                     .template block<3, Eigen::Dynamic>(0, 0, 3, in.cols())
                     .noalias()+= mt_skew * in.template block<3, Eigen::Dynamic>(3, 0, 3, in.cols());
-
-// const_cast<Eigen::MatrixBase<Derived3> &>(buffer).template block<3, -1>(0, 0, 3, in.cols()).noalias()=
-//                     -in.template block<3, -1>(3, 0, 3, in.cols()).colwise().cross(m_velocity.template head<3>());
-//                 const_cast<Eigen::MatrixBase<Derived3> &>(buffer).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
-//                     -in.template block<3, -1>(0, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-//                 const_cast<Eigen::MatrixBase<Derived3> &>(buffer).template block<3, -1>(0, 0, 3, in.cols()).noalias()+=
-//                     buffer.template block<3, -1>(3, 0, 3, in.cols());
-
-//                 const_cast<Eigen::MatrixBase<Derived3> &>(buffer).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
-//                     -in.template block<3, -1>(3, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(3).noalias() = m_velocity(4) *  in.row(5) - m_velocity(5)*in.row(4);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(4).noalias() = m_velocity(5) *  in.row(3) - m_velocity(3)*in.row(5);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(5).noalias() = m_velocity(3) *  in.row(4) - m_velocity(4)*in.row(3);
-
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(0).noalias() = m_velocity(4) *  in.row(2) - m_velocity(5)*in.row(1);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(1).noalias() = m_velocity(5) *  in.row(0) - m_velocity(3)*in.row(2);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(2).noalias() = m_velocity(3) *  in.row(1) - m_velocity(4)*in.row(0);
-
-
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(0).noalias() += m_velocity(1) *  in.row(5) - m_velocity(2)*in.row(4);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(1).noalias() += m_velocity(2) *  in.row(3) - m_velocity(0)*in.row(5);
-                // const_cast<Eigen::MatrixBase<Derived3> &>(buffer).row(2).noalias() += m_velocity(0) *  in.row(4) - m_velocity(1)*in.row(3);
                 const_cast<Eigen::MatrixBase<Derived2> &>(out)= buffer;
             }
-
-            // void applyTo(Motion &trans, Motion &out) {
-            //     // out.m_P = m_P + this->m_R * trans.m_P;
-            //     // out.m_R = this->m_R * trans.m_R;
-            // }
 
             template<typename D>
             void applyTranspose(SpatialInertia<T> &si, const Eigen::MatrixBase<D> &out) {
@@ -201,19 +150,6 @@ namespace ARDL {
 
             template<typename DI, typename DO>
             void applyTransposeTo(const Eigen::MatrixBase<DI> &in, const Eigen::MatrixBase<DO> &out) {
-                // ARDL::Util::Math::skewMatrix(m_velocity.template tail<3>(), m_matrix.template block<3, 3>(0, 0));
-                //     m_matrix.template block<3, 3>(3, 3)= m_matrix.template block<3, 3>(0, 0);
-                //     ARDL::Util::Math::skewMatrix(m_velocity.template head<3>(), m_matrix.template block<3, 3>(0, 3));
-                // [w_skew v_skew; 0 w_skew]^T
-                // [-w_skew 0; -v_skew; -w_skew]
-
-                // const_cast<Eigen::MatrixBase<DO> &>(out).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
-                //     in.template block<3, -1>(0, 0, 3, in.cols()).colwise().cross(m_velocity.template head<3>());
-                // const_cast<Eigen::MatrixBase<DO> &>(out).template block<3, -1>(3, 0, 3, in.cols()).noalias()+=
-                //     in.template block<3, -1>(3, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-                // const_cast<Eigen::MatrixBase<DO> &>(out).template block<3, -1>(0, 0, 3, in.cols()).noalias()=
-                //     in.template block<3, -1>(0, 0, 3, in.cols()).colwise().cross(m_velocity.template tail<3>());
-                // mt_skew * in.template block<3, -1>(3, 0, 3, in.cols());
                 skewMatrix(m_velocity.template head<3>(), mt_skew);
                 const_cast<Eigen::MatrixBase<DO> &>(out).template block<3, -1>(3, 0, 3, in.cols()).noalias()=
                     -mt_skew * in.template block<3, -1>(0, 0, 3, in.cols());
@@ -249,13 +185,6 @@ namespace ARDL {
                 m_velocity.noalias()*= in;
                 cache= false;
             }
-
-// #ifdef ARDL_EXP_TEM
-//             template<typename Exp2>
-//             void operator=(LieExpression<Exp2> &in) {
-//                 in(*this);
-//             }
-// #endif
         };
     } // namespace Math
 } // namespace ARDL

@@ -13,11 +13,9 @@ namespace ARDL {
         static std::string extractModelPath(std::string filename) {
             if (filename.find("model://") != std::string::npos) {
                 std::string gz_model_paths = std::getenv("GAZEBO_MODEL_PATH");
-                std::cout << "MODEL PATHS=" << gz_model_paths << std::endl;
                 std::istringstream iss(gz_model_paths);
                 std::string possible_path;
                 while (std::getline(iss, possible_path, ':')) {
-                    std::cout << "New PATH=" << (possible_path + filename.substr(7)) << std::endl;
                     if (std::ifstream((possible_path + filename.substr(7)).c_str())) {
                         filename = (possible_path + filename.substr(7));
                         break;
@@ -43,14 +41,10 @@ namespace ARDL {
                                            AI_CONFIG_PP_SBP_REMOVE,
                                            aiPrimitiveType_POINT
                                            | aiPrimitiveType_LINE);
-                std::cout<<"FILENAME ORIG: "<<filename<<std::endl;
                 filename = extractModelPath(filename);
-                std::cout<<"FILENAME NEW: "<<filename<<std::endl;
                 std::ifstream t(filename);
                 std::string input_model((std::istreambuf_iterator<char>(t)),
                                         std::istreambuf_iterator<char>());
-
-                // std::cout << "input mesh file: " << input_model << std::endl;
                 std::string extension;
                 const std::size_t extensionIndex = filename.find_last_of('.');
                 if (extensionIndex != std::string::npos)

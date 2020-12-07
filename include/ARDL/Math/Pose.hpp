@@ -38,7 +38,6 @@ private:
         m_Matrix.template block<3, 3>(0, 3) * m_R;
   }
 
-private:
   // temporary variables
   Eigen::Matrix<T, 3, 3> t_P_skew, rTh_skew, rThmp_skew, tmp_inertia;
 
@@ -176,10 +175,6 @@ public:
       typename std::enable_if<Derived2::ColsAtCompileTime == 1, int>::type = 0>
   void apply(Eigen::MatrixBase<Derived2> const &vector,
              Eigen::MatrixBase<Derived> const &out) const {
-    // if constexpr(Derived2::ColsAtCompileTime==1){
-    /*if constexpr(Derived2::ColsAtCompileTime!=1){
-    std::cout<<"SIZE : "<<Derived2::BlockCols<<std::endl;
-    }*/
     mt_apply.template tail<3>().noalias() = m_R * vector.template tail<3>();
     mt_apply.template head<3>().noalias() = m_R * vector.template head<3>();
     const_cast<Eigen::MatrixBase<Derived> &>(out).template head<3>().noalias() =
@@ -189,7 +184,6 @@ public:
         .noalias() += mt_apply.template head<3>();
     const_cast<Eigen::MatrixBase<Derived> &>(out).template tail<3>().noalias() =
         mt_apply.template tail<3>();
-    //  }
   }
 
   template <
@@ -314,6 +308,49 @@ public:
         .noalias() = m_R.transpose() * input.template block<3, Eigen::Dynamic>(
                                            3, 0, 3, input.cols());
   }
+
+
+  template <
+      typename Derived2, typename Derived>
+  void applyTranspose(Eigen::MatrixBase<Derived2> const &in,
+             Eigen::MatrixBase<Derived> const &out) const {
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(0, 0, 3, in.cols())
+        .noalias() = m_R.transpose() * in.template block<3, -1>(0, 0, 3, in.cols());
+    skewMatrix(m_P, mt_skew);
+
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(3, 0, 3, in.cols())
+        .noalias() = m_R.transpose() * in.template block<3, -1>(3, 0, 3, in.cols());
+
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(3, 0, 3, in.cols())
+        .noalias() -=
+        mt_skew * in.template block<3, -1>(0, 0, 3, in.cols());
+  }
+
+
+  template <
+      typename Derived2, typename Derived>
+  void applyInverseTranspose(Eigen::MatrixBase<Derived2> const &in,
+             Eigen::MatrixBase<Derived> const &out) const {
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(0, 0, 3, in.cols())
+        .noalias() = m_R * in.template block<3, -1>(0, 0, 3, in.cols());
+    skewMatrix(-m_P, mt_skew);
+
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(3, 0, 3, in.cols())
+        .noalias() = m_R * in.template block<3, -1>(3, 0, 3, in.cols());
+
+    const_cast<Eigen::MatrixBase<Derived> &>(out)
+        .template block<3, -1>(3, 0, 3, in.cols())
+        .noalias() -=
+        mt_skew * out.template block<3, -1>(0, 0, 3, in.cols());
+  }
+
+
+
   void log6(Motion<T> &se3) {
     using namespace Eigen;
     Quaterniond errorQuat(getR());
@@ -328,7 +365,6 @@ public:
         (1 - (theta * std::cos(theta / 2)) / (2 * std::sin(theta / 2))) /
             (theta * theta) * (t4 * t4);
     se3.getVelocity().template head<3>() = (V * getP());
-    // se3.getVelocity().template head<3>() = (getP());
   }
 
   /**
@@ -340,17 +376,6 @@ public:
   friend std ::ostream &operator<<(std::ostream &out, const Pose<T> &At) {
     return out << "R:\n" << At.m_R << "\np:\n" << At.m_P;
   }
-  // #ifdef ARDL_EXP_TEM
-  //             /**
-  //              *  @brief
-  //              *
-  //              *  @param in
-  //              **/
-  //             template<typename Exp2>
-  //             void operator=(LieExpression<Exp2> &in) {
-  //                 in(*this);
-  //             }
-  // #endif
 };
 } // namespace Math
 } // namespace ARDL

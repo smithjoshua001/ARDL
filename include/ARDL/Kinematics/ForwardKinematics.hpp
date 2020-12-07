@@ -6,9 +6,6 @@
 namespace ARDL {
 using namespace Model;
 using namespace Math;
-namespace Frames {
-enum Frame { BODY, MIXED, SPATIAL };
-}
 using namespace Frames;
 template <typename T, Frame F = Frame::BODY> class ForwardKinematics {
 private:
@@ -230,7 +227,7 @@ public:
   }
 
   template <Frame OF = F>
-  void getJacobians(const aligned_vector<Pose<T>> &Ads,
+  void getJacobians(const aligned_vector<Pose<T>> &poses,
                     aligned_vector<Jacobian<T>> &jacs) {
     jacs.front().setZero();
 
@@ -259,27 +256,27 @@ public:
       for (size_t i = 0; i < m_chain->getNumOfJoints(); i++) {
         jacs[i].template block<6, -1>(0, 0, 6, i).noalias() =
             mt_jacobian.template block<6, -1>(0, 0, 6, i);
-        Ads[i + 1].apply(mt_jacobian.col(i), mt_jacobian.col(i));
+        poses[i + 1].apply(mt_jacobian.col(i), mt_jacobian.col(i));
         jacs[i].col(i) = mt_jacobian.col(i);
       }
     }
   }
 
   template <Frame OF = F>
-  void getJacobianDots(aligned_vector<Pose<T>> &Ads,
-                       aligned_vector<Motion<T>> &adjs,
+  void getJacobianDots(aligned_vector<Pose<T>> &poses,
+                       aligned_vector<Motion<T>> &vels,
                        aligned_vector<Jacobian<T>> &jacs,
                        aligned_vector<Jacobian<T>> &jacDots) {
     jacDots.front().setZero();
     if constexpr (OF == Frame::SPATIAL) {
       jacDots[0].template col(0) = jacs[0].template col(0);
-      adjs[0].apply(jacDots[0].template col(0), jacDots[0].template col(0),
+      vels[0].apply(jacDots[0].template col(0), jacDots[0].template col(0),
                     mt_jacobianDot.template col(0));
       for (size_t i = 1; i < m_chain->getNumOfJoints(); i++) {
         jacDots[i].template block<6, -1>(0, 0, 6, i).noalias() =
             jacDots[i - 1].template block<6, -1>(0, 0, 6, i);
         jacDots[i].template col(i) = jacs[i].template col(i);
-        adjs[i].apply(jacDots[i].template col(i), jacDots[i].template col(i),
+        vels[i].apply(jacDots[i].template col(i), jacDots[i].template col(i),
                       mt_jacobianDot.template col(0));
       }
     } else if constexpr (OF == Frame::BODY) {
@@ -310,10 +307,10 @@ public:
     }
   }
 
-  void getLieBrackets(aligned_vector<Motion<T>> &adjs,
+  void getLieBrackets(aligned_vector<Motion<T>> &vels,
                       aligned_vector<Jacobian<T>> &jacobians) {
     for (size_t t_j = 0; t_j < jacobians.size(); t_j++) {
-      adjs[t_j] =
+      vels[t_j] =
           jacobians[t_j].template block<6, Eigen::Dynamic>(0, 0, 6, t_j + 1) *
           m_chain->getQd().head(t_j + 1);
     }
@@ -324,12 +321,12 @@ public:
   }
 
   template <Frame OF = F>
-  void getJacobiansDq(const aligned_vector<Pose<T>> &Ads,
+  void getJacobiansDq(const aligned_vector<Pose<T>> &poses,
                       aligned_vector<Jacobian<T>> &jacs,
                       aligned_vector<aligned_vector<Jacobian<T>>> &jacsDq) {
     size_t dof = m_chain->getNumOfJoints();
     for (size_t i = 1; i < dof; i++) {
-      Ads[i].applyInverseTo(Ads[i + 1], mt_accumulatorLocal);
+      poses[i].applyInverseTo(poses[i + 1], mt_accumulatorLocal);
 
       for (size_t i0 = 0; i0 < dof; i0++) {
         mt_accumulatorLocal.applyInverseMat(
@@ -351,8 +348,8 @@ public:
 
   template <Frame OF = F>
   void
-  getJacobianDotsDq(const aligned_vector<Pose<T>> &Ads,
-                    aligned_vector<Motion<T>> &adjs,
+  getJacobianDotsDq(const aligned_vector<Pose<T>> &poses,
+                    aligned_vector<Motion<T>> &vels,
                     aligned_vector<Jacobian<T>> &jacDots,
                     const aligned_vector<aligned_vector<Jacobian<T>>> &jacsDq,
                     aligned_vector<aligned_vector<Jacobian<T>>> &jacDotsDq) {
@@ -362,7 +359,7 @@ public:
       if constexpr (OF == Frame::BODY) {
         for (size_t i = 1; i < m_chain->getNumOfJoints(); i++) {
           Link<T> *link = m_chain->getMoveableLinksRef()[i];
-          Ads[i].applyInverseTo(Ads[i + 1], mt_accumulatorLocal);
+          poses[i].applyInverseTo(poses[i + 1], mt_accumulatorLocal);
           mt_accumulatorLocal.applyInverseMat(
               jacDotsDq[i0][i - 1].template block<6, Eigen::Dynamic>(0, 0, 6,
                                                                      i0),

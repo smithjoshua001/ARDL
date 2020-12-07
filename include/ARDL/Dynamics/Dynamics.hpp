@@ -109,7 +109,7 @@ namespace ARDL {
          * @param M Inertia matrix
          */
         template<Frame OF= Frame::BODY, typename InertiaD>
-        void calcJointInertiaMatrix(const aligned_vector<Pose<T>> Ads,
+        void calcJointInertiaMatrix(const aligned_vector<Pose<T>> poses,
                                     const aligned_vector<Jacobian<T>> &jacobians,
                                     Eigen::MatrixBase<InertiaD> const &M) {
             size_t i= 0;
@@ -117,7 +117,7 @@ namespace ARDL {
             for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
                 if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
                     mt_sI= link->getSI();
-                    if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(Ads[i]); }
+                    if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(poses[i]); }
                     mt_6xJ.noalias()= mt_sI.calculateSpatialInertia() * jacobians[i];
                     const_cast<Eigen::MatrixBase<InertiaD> &>(M).noalias()+= jacobians[i].transpose() * mt_6xJ;
                     i++;
@@ -133,13 +133,13 @@ namespace ARDL {
          * @param M Inertia matrix
          */
         template<Frame OF= Frame::BODY, typename InertiaD>
-        void calcJointInertiaMatrixOptim(const aligned_vector<Pose<T>> Ads,
+        void calcJointInertiaMatrixOptim(const aligned_vector<Pose<T>> poses,
                                          const aligned_vector<Jacobian<T>> &jacobians,
                                          Eigen::MatrixBase<InertiaD> const &M) {
             const_cast<Eigen::MatrixBase<InertiaD> &>(M).setZero();
             for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
                 mt_sI= m_chain->getMoveableLinks()[i + 1]->getSI();
-                if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(Ads[i]); }
+                if constexpr(OF == Frame::SPATIAL) { mt_sI.applyInverseXIX(poses[i]); }
                 mt_6xJ.noalias()= mt_sI.calculateSpatialInertia() * jacobians[i];
                 const_cast<Eigen::MatrixBase<InertiaD> &>(M).noalias()+= jacobians[i].transpose() * mt_6xJ;
             }
@@ -151,12 +151,12 @@ namespace ARDL {
          * @tparam Derived Subtype of output matrix
          * @param jacobians Aligned Vector of jacobians
          * @param jacobianDots Aligned vector of the derivative of the jacobians
-         * @param lbSE3 Lie Bracket for each joint
+         * @param vels Lie Bracket for each joint
          * @param C Output Coriolis and centrifugal matrix
          */
         template<Frame OF= Frame::BODY, typename Derived>
         void calcCoriolisMatrix(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
-                                aligned_vector<Motion<T>> &lbSE3, aligned_vector<Pose<T>> &Ads,
+                                aligned_vector<Motion<T>> &vels, aligned_vector<Pose<T>> &poses,
                                 Eigen::MatrixBase<Derived> const &C) {
             const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
             size_t i= 0;
@@ -164,16 +164,16 @@ namespace ARDL {
                 // if constexpr(OF == Frame::SPATIAL) {
                 //     if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
                 //         mt_sI= link->getSI();
-                //         mt_accumulatorGlobal= Ads[i];
+                //         mt_accumulatorGlobal= poses[i];
                 //         mt_accumulatorGlobal.inverse();
                 //         const Eigen::Matrix<T, 6, 6> &invAd= mt_accumulatorGlobal.getMatrix();
-                //         Ads[i].applyInverse(lbSE3[i].getVelocity(), mt_tempVelocity.getVelocity());
+                //         poses[i].applyInverse(vels[i].getVelocity(), mt_tempVelocity.getVelocity());
                 //         mt_tempVelocity.calcMatrix();
                 //         mt_6x6_1.noalias()= mt_sI.calculateSpatialInertia() * mt_tempVelocity.getMatrix();
                 //         mt_6x6_2.noalias()= mt_6x6_1 - mt_6x6_1.transpose();
                 //         mt_6x6_2*= invAd;
                 //         mt_6x6_1.noalias()= invAd.transpose() * mt_6x6_2;
-                //         mt_sI.applyInverseXIX(Ads[i]);
+                //         mt_sI.applyInverseXIX(poses[i]);
                 //         mt_6xJ.noalias()= mt_6x6_1 * jacobians[i];
                 //         mt_6xJ.noalias()+= mt_sI.calculateSpatialInertia() * jacobianDots[i];
 
@@ -183,7 +183,7 @@ namespace ARDL {
                 // } else
                 if constexpr(OF == Frame::BODY) {
                     if(!link.isRoot() && !ARDL_visit(link.getParentJoint(), isFixed())) {
-                        lbSE3[i].applyTranspose(link.getSI(), mt_6x6_1);
+                        vels[i].applyTranspose(link.getSI(), mt_6x6_1);
                         mt_6x6_2.setZero();
                         mt_6x6_2.noalias()= mt_6x6_1.transpose() - mt_6x6_1;
                         mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).setZero();
@@ -210,17 +210,17 @@ namespace ARDL {
          * @tparam Derived Subtype of output matrix
          * @param jacobians Aligned Vector of jacobians
          * @param jacobianDots Aligned vector of the derivative of the jacobians
-         * @param lbSE3 Lie Bracket for each joint
+         * @param vels Lie Bracket for each joint
          * @param C Output Coriolis and centrifugal matrix
          */
         template<Frame OF= Frame::BODY, typename Derived>
         void calcCoriolisMatrixOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Jacobian<T>> &jacobianDots,
-                                     aligned_vector<Motion<T>> &lbSE3, aligned_vector<Pose<T>> &Ads,
+                                     aligned_vector<Motion<T>> &vels, aligned_vector<Pose<T>> &poses,
                                      Eigen::MatrixBase<Derived> const &C) {
             const_cast<Eigen::MatrixBase<Derived> &>(C).setZero();
             for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
                 if constexpr(OF == Frame::BODY) {
-                    lbSE3[i].applyTranspose(m_chain->getMoveableLinks()[i + 1]->getSI(), mt_6x6_1);
+                    vels[i].applyTranspose(m_chain->getMoveableLinks()[i + 1]->getSI(), mt_6x6_1);
                     mt_6x6_2.setZero();
                     mt_6x6_2.noalias()= mt_6x6_1.transpose() - mt_6x6_1;
                     mt_6xJ.template block<6, -1>(0, 0, 6, i + 1).setZero();
@@ -243,24 +243,24 @@ namespace ARDL {
          *
          * @tparam Derived Subtype of gravity vector
          * @param jacobians aligned vector of jacobians
-         * @param Ads aligned vector of Adjoint transforms
+         * @param poses aligned vector of Adjoint transforms
          * @param G Output gravity vector
          */
         template<Frame OF= Frame::BODY, typename Derived>
-        void calcGravityVector(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &Ads,
+        void calcGravityVector(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &poses,
                                Eigen::MatrixBase<Derived> const &G) {
             const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
             size_t i= 0;
-            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            if constexpr(OF == Frame::BODY) { poses[0].apply(m_gravity, mt_6x6_1.col(1)); }
             for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
                 if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
                     mt_sI= link->getSI();
                     if constexpr(OF == Frame::SPATIAL) {
-                        mt_sI.applyInverseXIX(Ads[i]);
+                        mt_sI.applyInverseXIX(poses[i]);
                         mt_gravity= m_gravity;
                         mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
                     } else if constexpr(OF == Frame::BODY) {
-                        Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
+                        poses[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
                         mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
                     }
                     const_cast<MatrixBase<Derived> &>(G).head(i + 1).noalias()+=
@@ -275,22 +275,22 @@ namespace ARDL {
          *
          * @tparam Derived Subtype of gravity vector
          * @param jacobians aligned vector of jacobians
-         * @param Ads aligned vector of Adjoint transforms
+         * @param poses aligned vector of Adjoint transforms
          * @param G Output gravity vector
          */
         template<Frame OF= Frame::BODY, typename Derived>
-        void calcGravityVectorOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &Ads,
+        void calcGravityVectorOptim(aligned_vector<Jacobian<T>> &jacobians, aligned_vector<Pose<T>> &poses,
                                     Eigen::MatrixBase<Derived> const &G) {
             const_cast<Eigen::MatrixBase<Derived> &>(G).setZero();
-            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            if constexpr(OF == Frame::BODY) { poses[0].apply(m_gravity, mt_6x6_1.col(1)); }
             for(size_t i= 0; i < m_chain->getMoveableLinks().size() - 1; i++) {
                 mt_sI= m_chain->getMoveableLinksRef()[i + 1]->getSI();
                 if constexpr(OF == Frame::SPATIAL) {
-                    mt_sI.applyInverseXIX(Ads[i + 1]);
+                    mt_sI.applyInverseXIX(poses[i + 1]);
                     mt_gravity= m_gravity;
                     mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
                 } else if constexpr(OF == Frame::BODY) {
-                    Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
+                    poses[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity);
                     mt_sI.apply(mt_gravity, mt_6x6_1.col(0));
                 }
                 const_cast<MatrixBase<Derived> &>(G).head(i + 1).noalias()+=
@@ -300,7 +300,7 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY, typename RD, typename JD>
-        void calcRegressor(const Eigen::MatrixBase<JD> &qdd, const aligned_vector<Pose<T>> &Ads,
+        void calcRegressor(const Eigen::MatrixBase<JD> &qdd, const aligned_vector<Pose<T>> &poses,
                            aligned_vector<Motion<T>> &adjs, const aligned_vector<Jacobian<T>> &jacs,
                            const aligned_vector<Jacobian<T>> &jDs, Eigen::MatrixBase<RD> const &out) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
@@ -311,9 +311,9 @@ namespace ARDL {
             mt_momentumRegressor2.setZero();
             Eigen::Matrix<T, 6, 2> mt_6x6_1;
             VectorX<T> qd= m_chain->getQd();
-            Ads[0].apply(m_gravity, mt_gravity);
+            poses[0].apply(m_gravity, mt_gravity);
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
-                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                poses[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
                 mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.template head(i + 1);
                 mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.template head(i + 1);
                 adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1), mt_6x6_1.col(1));
@@ -330,7 +330,7 @@ namespace ARDL {
 
         template<Frame OF= Frame::BODY, typename RD, typename JD, typename JD2>
         void calcSlotineLiRegressor(const Eigen::MatrixBase<JD> &qd, const Eigen::MatrixBase<JD2> &qdd,
-                                    const aligned_vector<Pose<T>> &Ads, aligned_vector<Motion<T>> &adjs,
+                                    const aligned_vector<Pose<T>> &poses, aligned_vector<Motion<T>> &adjs,
                                     const aligned_vector<Jacobian<T>> &jacs, const aligned_vector<Jacobian<T>> &jDs,
                                     Eigen::MatrixBase<RD> const &out) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
@@ -340,9 +340,9 @@ namespace ARDL {
             mt_momentumRegressor.setZero();
             mt_momentumRegressor2.setZero();
             Eigen::Matrix<T, 6, 2> mt_6x6_1;
-            Ads[0].apply(m_gravity, mt_gravity);
+            poses[0].apply(m_gravity, mt_gravity);
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
-                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                poses[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
                 mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
                 mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
                 adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1), mt_6x6_1.col(1));
@@ -362,29 +362,29 @@ namespace ARDL {
         template<typename RegressorD, typename JointD>
         void initFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
                                             const aligned_vector<Jacobian<T>> &jacobianDots,
-                                            const aligned_vector<Motion<T>> &lbSE3,
-                                            const aligned_vector<Pose<T>> &Ads,
+                                            const aligned_vector<Motion<T>> &vels,
+                                            const aligned_vector<Pose<T>> &poses,
                                             const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
                                             Eigen::MatrixBase<RegressorD> const &out) {
             const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
 
-            Ads[0].apply(m_gravity, mt_gravity);
+            poses[0].apply(m_gravity, mt_gravity);
             for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
                 mt_bodyVelocity.getVelocity().setZero();
-                Ads[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
+                poses[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
 
                 mt_bodyVelocity= (filter.getBeta() * jacobians[i] * qd);
                 mt_bodyVelocity-= mt_6x6_1.col(0);
 
                 mt_6x6_1.col(0).noalias()= jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
-                lbSE3[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
+                vels[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
                 mt_bodyVelocity-= mt_6x6_1.col(1);
 
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
 
                 momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
 
-                mt_momentumRegressor.noalias()+= lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2;
+                mt_momentumRegressor.noalias()+= vels[i].getMatrix().transpose() * mt_momentumRegressor2;
 
                 const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
                     jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
@@ -408,29 +408,29 @@ namespace ARDL {
         template<typename RegressorD, typename JointD>
         void computeFilteredSlotineLiRegressor(const aligned_vector<Jacobian<T>> &jacobians,
                                                const aligned_vector<Jacobian<T>> &jacobianDots,
-                                               const aligned_vector<Motion<T>> &lbSE3,
-                                               const aligned_vector<Pose<T>> &Ads,
+                                               const aligned_vector<Motion<T>> &vels,
+                                               const aligned_vector<Pose<T>> &poses,
                                                const Eigen::MatrixBase<JointD> &qd, DiscreteLowPassFilter<T> &filter,
                                                Eigen::MatrixBase<RegressorD> const &out) {
             const_cast<Eigen::MatrixBase<RegressorD> &>(out).setZero();
 
-            Ads[0].apply(m_gravity, mt_gravity);
+            poses[0].apply(m_gravity, mt_gravity);
             for(int i= 0; i < m_chain->getNumOfJoints(); i++) {
                 // mt_bodyVelocity.getVelocity().setZero();
-                Ads[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
+                poses[i + 1].applyInverse(mt_gravity, mt_6x6_1.col(0));
 
                 mt_bodyVelocity= (filter.getBeta() * jacobians[i] * qd);
                 mt_bodyVelocity-= mt_6x6_1.col(0);
 
                 mt_6x6_1.col(0).noalias()= jacobians[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
-                lbSE3[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
+                vels[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
                 mt_bodyVelocity-= mt_6x6_1.col(1);
 
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor);
 
                 momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
 
-                mt_momentumRegressor.noalias()+= lbSE3[i].getMatrix().transpose() * mt_momentumRegressor2;
+                mt_momentumRegressor.noalias()+= vels[i].getMatrix().transpose() * mt_momentumRegressor2;
 
                 const_cast<Eigen::MatrixBase<RegressorD> &>(out).template block<-1, 10>(0, 10 * i, i + 1, 10)=
                     jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor;
@@ -457,8 +457,8 @@ namespace ARDL {
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> R(10 * m_chain->getNumOfJoints(),
                                                                10 * m_chain->getNumOfJoints());
             ForwardKinematics<T> fk(m_chain);
-            aligned_vector<Pose<T>> Ads(m_chain->getNumOfJoints() + 1);
-            aligned_vector<Motion<T>> lbSE3(m_chain->getNumOfJoints());
+            aligned_vector<Pose<T>> poses(m_chain->getNumOfJoints() + 1);
+            aligned_vector<Motion<T>> vels(m_chain->getNumOfJoints());
             aligned_vector<Jacobian<T>> jacobians, jacobianDots;
 
             Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> regressors(m_chain->getNumOfJoints(),
@@ -505,12 +505,12 @@ namespace ARDL {
                 // qdd*= qddLimit;
                 m_chain->updateChain(q,qd);
                 m_chain->updateMatricesOptim();
-                fk.getBodyAdjointsOptim(Ads);
+                fk.getBodyAdjointsOptim(poses);
 
-                fk.template getJacobians<ARDL::Frame::BODY>(Ads, jacobians);
-                fk.getLieBrackets(lbSE3, jacobians);
-                fk.template getJacobianDots<ARDL::Frame::BODY>(Ads, lbSE3, jacobians, jacobianDots);
-                this->calcSlotineLiRegressor<ARDL::Frame::BODY>(qd, qdd, Ads, lbSE3, jacobians, jacobianDots,
+                fk.template getJacobians<ARDL::Frame::BODY>(poses, jacobians);
+                fk.getLieBrackets(vels, jacobians);
+                fk.template getJacobianDots<ARDL::Frame::BODY>(poses, vels, jacobians, jacobianDots);
+                this->calcSlotineLiRegressor<ARDL::Frame::BODY>(qd, qdd, poses, vels, jacobians, jacobianDots,
                                                                 regressors);
 
                 R+= (regressors.transpose() * regressors);// / random_samples;
@@ -573,7 +573,7 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY>
-        void calcJointInertiaMatrixDq(const aligned_vector<Pose<T>> Ads,
+        void calcJointInertiaMatrixDq(const aligned_vector<Pose<T>> poses,
                                       const aligned_vector<Jacobian<T>> &jacobians,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                       aligned_vector<MatrixX<T>> &M) {
@@ -601,7 +601,7 @@ namespace ARDL {
         }
         // TODO optimize
         template<Frame OF= Frame::BODY>
-        void calcCoriolisMatrixDq(aligned_vector<Motion<T>> &lbSE3, const aligned_vector<Jacobian<T>> &jacobians,
+        void calcCoriolisMatrixDq(aligned_vector<Motion<T>> &vels, const aligned_vector<Jacobian<T>> &jacobians,
                                   aligned_vector<Jacobian<T>> &jacobianDots,
                                   const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                   const aligned_vector<aligned_vector<Jacobian<T>>> &jacobianDotsDq,
@@ -611,10 +611,10 @@ namespace ARDL {
                 C[i1].setZero();
                 for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
                     if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
-                        lbSE3[i].calcMatrix();
-                        mt_6x6_1= lbSE3[i].getMatrix();
+                        vels[i].calcMatrix();
+                        mt_6x6_1= vels[i].getMatrix();
                         link->getSI().apply(mt_6x6_1, mt_6x6_2);
-                        lbSE3[i].applyTranspose(link->getSI(), mt_6x6_2);
+                        vels[i].applyTranspose(link->getSI(), mt_6x6_2);
 
                         mt_6x6_1-= mt_6x6_2;
 
@@ -692,16 +692,16 @@ namespace ARDL {
         }
 
         template<Frame OF= Frame::BODY, int j>
-        void calcGravityVectorDq(const aligned_vector<Pose<T>> Ads, const aligned_vector<Jacobian<T>> &jacobians,
+        void calcGravityVectorDq(const aligned_vector<Pose<T>> poses, const aligned_vector<Jacobian<T>> &jacobians,
                                  const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
                                  aligned_vector<Eigen::Matrix<T, j, 1>> &G) {
             for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) { G[i1].setZero(); }
             size_t i= 0;
-            if constexpr(OF == Frame::BODY) { Ads[0].apply(m_gravity, mt_6x6_1.col(1)); }
+            if constexpr(OF == Frame::BODY) { poses[0].apply(m_gravity, mt_6x6_1.col(1)); }
             for(std::shared_ptr<Link<T>> &link: m_chain->getLinksRef()) {
                 if(!link->isRoot() && !ARDL_visit_ptr(link->getParentJoint(), isFixed())) {
                     mt_sI= link->getSI();
-                    if constexpr(OF == Frame::BODY) { Ads[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity); }
+                    if constexpr(OF == Frame::BODY) { poses[i + 1].applyInverse(mt_6x6_1.col(1), mt_gravity); }
                     for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
                         mt_bodyVelocity.setVelocity(jacobians[i].col(i1));
                         mt_6x6_2= mt_bodyVelocity.getMatrix();
@@ -725,38 +725,38 @@ namespace ARDL {
                                       const aligned_vector<Jacobian<T>> &jacDots,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacsDq,
                                       const aligned_vector<aligned_vector<Jacobian<T>>> &jacDotsDq,
-                                      aligned_vector<Motion<T>> &adjs, const aligned_vector<Pose<T>> &Ads,
+                                      aligned_vector<Motion<T>> &adjs, const aligned_vector<Pose<T>> &poses,
                                       const Eigen::MatrixBase<JointD> &qd, const Eigen::MatrixBase<JointD> &qdd,
                                       aligned_vector<Regressor<T>> &regressorsDq) {
             static_assert(Frame::BODY == OF, "BODY Frame is currently implemented");
 
-            Ads[0].apply(m_gravity, mt_gravity);
+            poses[0].apply(m_gravity, mt_gravity);
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
                 mt_bodyVelocity.getVelocity().setZero();
-                Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
-                // J * qdd_r + Ads^-1 grav
+                poses[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                // J * qdd_r + poses^-1 grav
                 mt_bodyVelocity+= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qdd.head(i + 1);
                 // J * q_r
                 mt_6x6_1.col(0).noalias()= jacs[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
                 // adj * J * q_r
                 adjs[i].apply(mt_6x6_1.col(0), mt_6x6_1.col(1));
-                // J qdd_r + adj J q_r + Ads^-1 grav
+                // J qdd_r + adj J q_r + poses^-1 grav
                 mt_bodyVelocity+= mt_6x6_1.col(1);
-                // J qdd_r + adj J q_r + Jd qd_r + Ads^-1 grav
+                // J qdd_r + adj J q_r + Jd qd_r + poses^-1 grav
                 mt_bodyVelocity+= jacDots[i].template block<6, -1>(0, 0, 6, i + 1) * qd.head(i + 1);
-                // A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav)
+                // A(J qdd_r + adj J q_r + Jd qd + poses^-1 grav)
                 momentumRegressor(mt_bodyVelocity.getVelocity(), mt_momentumRegressor3);
                 // A(J q_r)
                 momentumRegressor(mt_6x6_1.col(0), mt_momentumRegressor2);
                 adjs[i].calcMatrix();
-                // A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav) - adjsT A(J q_r)
+                // A(J qdd_r + adj J q_r + Jd qd + poses^-1 grav) - adjsT A(J q_r)
                 mt_momentumRegressor3.noalias()-= adjs[i].getMatrix().transpose() * mt_momentumRegressor2;
                 for(size_t i1= 0; i1 < m_chain->getNumOfJoints(); i1++) {
-                    // J/dq^T (A(J qdd_r + adj J q_r + Jd qd + Ads^-1 grav) - adjsT A(J q_r))
+                    // J/dq^T (A(J qdd_r + adj J q_r + Jd qd + poses^-1 grav) - adjsT A(J q_r))
                     regressorsDq[i1].template block<-1, 10>(0, 10 * i, i + 1, 10).noalias()=
                         jacsDq[i1][i].template block<6, -1>(0, 0, 6, i + 1).transpose() * mt_momentumRegressor3;
 
-                    Ads[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
+                    poses[i + 1].applyInverse(mt_gravity, mt_bodyVelocity.getVelocity());
                     mt_tempVelocity= jacs[i].col(i1);
                     //-adj_jk * Ad^-1 * grav
                     mt_tempVelocity.apply(mt_bodyVelocity.getVelocity(), mt_6x6_1.col(5), mt_6x6_1.col(5));
@@ -804,7 +804,7 @@ namespace ARDL {
         void calcSlotineLiRegressorDqd(const aligned_vector<Jacobian<T>> &jacobians,
                                        const aligned_vector<Jacobian<T>> &jacobianDots,
                                        const aligned_vector<aligned_vector<Jacobian<T>>> &jacobiansDq,
-                                       const aligned_vector<Motion<T>> &lbSE3,
+                                       const aligned_vector<Motion<T>> &vels,
                                        const Eigen::MatrixBase<JointD> &qd,
                                        aligned_vector<Regressor<T>> &regressorsDq) {
             for(size_t i= 0; i < m_chain->getNumOfJoints(); i++) {
@@ -822,7 +822,7 @@ namespace ARDL {
                     mt_tempVelocity.apply(mt_6x6_1.col(3), mt_bodyVelocity.getVelocity(), mt_6x6_1.col(0));
 
                     // adj_0,k J^h_k
-                    lbSE3[i].apply(jacobians[i].col(i1), mt_6x6_1.col(1));
+                    vels[i].apply(jacobians[i].col(i1), mt_6x6_1.col(1));
 
                     // adj(J^h_k) Jq + adj_0,k J^h_k
                     mt_bodyVelocity+= mt_6x6_1.col(1);
@@ -847,7 +847,7 @@ namespace ARDL {
                     // adj_{0,k} A(J^h_k)
                     regressorsDq[i1].template block<Eigen::Dynamic, 10>(0, 10 * i, i + 1, 10).noalias()-=
                         jacobians[i].template block<6, -1>(0, 0, 6, i + 1).transpose() *
-                        lbSE3[i].getMatrix().transpose() * mt_momentumRegressor;
+                        vels[i].getMatrix().transpose() * mt_momentumRegressor;
                 }
             }
         }
