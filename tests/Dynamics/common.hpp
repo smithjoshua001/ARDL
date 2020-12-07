@@ -2,6 +2,8 @@
 
 #include <ARDL/Kinematics/ForwardKinematics.hpp>
 #include <ARDL/Dynamics/Dynamics.hpp>
+#include <ARDL/Kinematics/ForwardKinematicsTree.hpp>
+#include <ARDL/Dynamics/DynamicsTree.hpp>
 
 #include <kdl/kdl.hpp>
 #include <kdl_parser.hpp>
@@ -75,6 +77,13 @@ template <typename T> void setupARDL(std::string filename, ARDL::Data<double>& d
     dyn = std::shared_ptr<Dynamics<T> >(new Dynamics<T>(chain));
 }
 #endif
+
+
+template <typename T> void setupARDL(std::string filename, std::shared_ptr<Tree<T> > &tree, std::shared_ptr<ForwardKinematicsTree<T> > &fk, std::shared_ptr<DynamicsTree<T> > &dyn) {
+    tree = std::shared_ptr<Tree<T> >(new Tree<T>(filename));
+    fk = std::shared_ptr<ForwardKinematicsTree<T> >(new ForwardKinematicsTree<T>(tree));
+    dyn = std::shared_ptr<DynamicsTree<T> >(new DynamicsTree<T>(tree));
+}
 
 template <typename Derived, typename Dervied2> void inline checkApproxMatrix(const Eigen::MatrixBase<Derived> &first, const Eigen::MatrixBase<Dervied2> &second, double margin = 0.0, double eps = std::numeric_limits<double>::epsilon() *100) {
     for (int i = 0; i < first.size() - 1; i++) {

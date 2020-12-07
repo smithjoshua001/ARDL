@@ -5,7 +5,7 @@
 namespace ARDL {
     namespace SP {
 
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
         template<typename T, class Derived, class NModel>
         class SPModel
 #else
@@ -19,7 +19,7 @@ namespace ARDL {
              public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
             typedef SPModel<T, Derived, NModel> ThisSPModel;
             SPModel(NP::NPModel<T,NModel> &&np): npModel(np.derived()) {}
             template<typename... Args, typename D2>

@@ -13,7 +13,7 @@ using namespace ARDL::Util;
 size_t iters= 5000;
 // size_t iters = 1;
 TEST_CASE("Standard Regressor Check", "[adjoint][kinematics]") {
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
     std::cout << "VARIANT ENABLED" << std::endl;
 #endif
     using T= double;
@@ -118,7 +118,7 @@ TEST_CASE("Standard Regressor Check", "[adjoint][kinematics]") {
 }
 
 TEST_CASE("Base Regressor Check", "[adjoint][kinematics]") {
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
     std::cout << "VARIANT ENABLED" << std::endl;
 #endif
     using T= float;

@@ -2,6 +2,7 @@
 
 #include <ARDL/Kinematics/ForwardKinematics.hpp>
 #include <ARDL/Dynamics/Dynamics.hpp>
+#include <ARDL/Kinematics/ForwardKinematicsTree.hpp>
 
 #include <kdl/kdl.hpp>
 #include <kdl_parser.hpp>
@@ -63,6 +64,10 @@ void setupPinocchio(std::string filename, pinocchio::Model &model, pinocchio::Da
 void setupARDL(std::string filename, std::shared_ptr<Chain<double> > &chain, std::shared_ptr<ForwardKinematics<double> > &fk) {
     chain = std::shared_ptr<Chain<double> >(new Chain<double>(filename));
     fk = std::shared_ptr<ForwardKinematics<double> >(new ForwardKinematics<double>(chain));
+}
+void setupARDL(std::string filename, std::shared_ptr<Tree<double> >& tree, std::shared_ptr<ForwardKinematicsTree<double>>& fk){
+    tree =std::shared_ptr<Tree<double> >(new Tree<double>(filename));
+    fk = std::shared_ptr<ForwardKinematicsTree<double> >(new ForwardKinematicsTree<double>(tree));
 }
 
 template <typename Derived, typename Dervied2> void inline checkApproxMatrix(const Eigen::MatrixBase<Derived> &first, const Eigen::MatrixBase<Dervied2> &second, double margin = 0.0, double eps = std::numeric_limits<float>::epsilon() *100) {

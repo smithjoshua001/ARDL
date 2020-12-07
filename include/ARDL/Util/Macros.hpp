@@ -1,7 +1,7 @@
 #pragma once
 #include "ARDL/Util/Visit.hpp"
 
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
     #define ARDL_VISIT my_visit
     #define VISITORDER 0
 

@@ -23,12 +23,9 @@ namespace ARDL {
         using namespace Joints;
         template<typename T>
         class Link
-#if !ARDL_EXTERNAL_DATA
             : public std::enable_shared_from_this<Link<T>>
-#endif
         {
              private:
-#if !ARDL_EXTERNAL_DATA
             bool m_isRoot, m_hasInertial, m_hasCollision;
             std::string m_name;
 
@@ -44,39 +41,10 @@ namespace ARDL {
             SpatialInertia<T> m_sI;
 
             urdf::LinkConstSharedPtr urdfModel;
-#else
-            char &m_isRoot, &m_hasInertial, &m_hasCollision;
-            std::string &m_name;
-
-            Eigen::Matrix<T, 12, 1> &m_inertialParameters;
-
-            JointVariant<T> *m_parentJoint_p;
-            Link<T> *m_parentLink_p;
-
-            std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>> &m_collisionModel_sp, &m_collisionModelOptimal_sp;
-            std::shared_ptr<fcl::CollisionObject<T>> &m_collisionObject_sp, m_collisionObjectOptimal_sp;
-            std::vector<std::string> &m_collisionFiles;
-
-            SpatialInertia<T> &m_sI;
-
-            urdf::LinkConstSharedPtr urdfModel;
-
-#endif
 
              public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-#if !ARDL_EXTERNAL_DATA
             Link(const Link<T> &copy, JointVariant<T> *parentJoint, Link<T> *parentLink)
-#else
-            Link(const Link<T> &copy, JointVariant<T> *parentJoint, Link<T> *parentLink, ARDL::Data<T> &data, size_t i)
-                : m_isRoot(data.isRoot[i]), m_hasInertial(data.hasInertial[i]), m_hasCollision(data.hasCollision[i]),
-                  m_name(data.name[i]), m_inertialParameters(data.inertialParameters[i]),
-                  m_collisionModel_sp(data.collisionModel_sp[i]),
-                  m_collisionModelOptimal_sp(data.collisionModelOptimal_sp[i]),
-                  m_collisionObject_sp(data.collisionObject_sp[i]), ,
-                  m_collisionObjectOptimal_sp(data.collisionObjectOptimal_sp) m_collisionFiles(data.collisionFiles[i]),
-                  m_sI(data.sI[i])
-#endif
             {
                 m_isRoot= copy.m_isRoot;
                 m_hasInertial= copy.m_hasInertial;
@@ -110,20 +78,8 @@ namespace ARDL {
 
             /***************** INITIALIZATION HANDLING *****************/
 
-#if !ARDL_EXTERNAL_DATA
             Link(urdf::LinkConstSharedPtr link, Link<T> *parentLink, JointVariant<T> *parentJoint)
                 : urdfModel(link)
-#else
-            Link(urdf::LinkConstSharedPtr link, Link<T> *parentLink, JointVariant<T> *parentJoint, ARDL::Data<T> &data,
-                 size_t i)
-                : urdfModel(link), m_isRoot(data.isRoot[i]), m_hasInertial(data.hasInertial[i]),
-                  m_hasCollision(data.hasCollision[i]), m_name(data.name[i]),
-                  m_inertialParameters(data.inertialParameters[i]), m_collisionModel_sp(data.collisionModel_sp[i]),
-                  m_collisionModelOptimal_sp(data.collisionModelOptimal_sp[i]),
-                  m_collisionObject_sp(data.collisionObject_sp[i]),
-                  m_collisionObjectOptimal_sp(collisionObjectOptimal_sp), m_collisionFiles(data.collisionFiles[i]),
-                  m_sI(data.sI[i])
-#endif
             {
                 m_name= link->name;
                 m_isRoot= (parentLink == nullptr);
@@ -140,6 +96,7 @@ namespace ARDL {
                                                                   t_quaternion.w());
 
                     Eigen::Matrix<T, 3, 3> t_rotationCOM= t_quaternion.toRotationMatrix().cast<T>();
+                    t_rotationCOM.setIdentity();
 
                     Eigen::Matrix<T, 3, 1> t_translationCOM;
                     t_translationCOM << link->inertial->origin.position.x, link->inertial->origin.position.y,
@@ -230,10 +187,6 @@ namespace ARDL {
                         if(m_collisionModelOptimal_sp->addSubModel(ps, ts) != fcl::BVH_OK) {
                             std::cerr << "COLLISION FAIL" << std::endl;
                         };
-
-                        // for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
-                        // m_collisionModelOptimal_sp->addTriangle(vertices[0], vertices[1], vertices[2]);
-                        // }
                         m_collisionModelOptimal_sp->endModel();
                         m_collisionModelOptimal_sp->computeLocalAABB();
                         m_parentLink_p->m_collisionModelOptimal_sp= m_collisionModelOptimal_sp;
@@ -258,7 +211,6 @@ namespace ARDL {
                         Link<T> *parentL= m_parentLink_p;
                         while(ARDL_visit(*(parentL->m_parentJoint_p), isFixed())) {
                             t_fixedTransform.apply(ARDL_visit(*(parentL->m_parentJoint_p), getOriginTransform()));
-
                             parentL= parentL->m_parentLink_p;
                         }
                         if(m_hasInertial) {
@@ -267,77 +219,10 @@ namespace ARDL {
                             // parentL->m_sI.applyXIX(t_fixedTransform);
                             // m_sI = parentL->m_sI;
                         }
-                    } // TODO HERE!!
-                    // else{
-                    //     if(!m_isRoot && m_parentLink_p->m_hasCollision &&
-                    //    m_parentLink_p->m_collisionModelOptimal_sp != nullptr &&
-                    //    ARDL_visit(*m_parentJoint_p, isFixed())) {
-                    //     std::cout << "OPTIMAL != NON-OPTIMAL" << std::endl;
-                    //     m_collisionModelOptimal_sp=
-                    //         std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(new fcl::BVHModel<fcl::OBB<T>>());
-                    //     std::vector<Matrix<T, 3, 1>> ps;
-                    //     std::vector<fcl::Triangle> ts;
-
-                    //     for(size_t i= 0; i < m_collisionModel_sp->num_vertices; i++) {
-                    //         ps.push_back((m_collisionModel_sp->vertices)[i]);
-                    //     }
-                    //     for(size_t i= 0; i < m_collisionModel_sp->num_tris; i++) {
-                    //         ts.push_back(m_collisionModel_sp->tri_indices[i]);
-                    //     }
-
-                    //     Pose transform(ARDL_visit(*m_parentJoint_p, getOriginTransform()));
-                    //     transform.inverse();
-                    //     fcl::Transform3<T> t_collisionOffset;
-                    //     t_collisionOffset.translation()= transform.getP();
-                    //     t_collisionOffset.linear()= transform.getR();
-                    //     std::cout << "transform!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-                    //     std::cout << transform << std::endl;
-                    //     std::cout << "ps.size()" << std::endl;
-                    //     std::cout << ps.size() << std::endl;
-                    //     for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
-                    //         ps.push_back(t_collisionOffset*(m_parentLink_p->m_collisionModelOptimal_sp->vertices)[j]);
-                    //         // std::cout << ps.back().transpose() << std::endl;
-                    //     }
-                    //     // std::cout << ps.size() << std::endl;
-                    //     for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_tris; j++) {
-                    //         ts.push_back(m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j]);
-
-                    //         // std::cout << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][0] << ", "
-                    //         //           << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][1] << ", "
-                    //         //           << m_parentLink_p->m_collisionModelOptimal_sp->tri_indices[j][2] <<
-                    //         std::endl; ts.back()[0]+= m_collisionModel_sp->num_vertices; ts.back()[1]+=
-                    //         m_collisionModel_sp->num_vertices; ts.back()[2]+= m_collisionModel_sp->num_vertices;
-                    //         // std::cout << ts.back()[0] << ", " << ts.back()[1] << ", " << ts.back()[2] <<
-                    //         std::endl;
-                    //     }
-
-                    //     m_collisionModelOptimal_sp->beginModel();
-                    //     if(m_collisionModelOptimal_sp->addSubModel(ps, ts) != fcl::BVH_OK) {
-                    //         std::cerr << "COLLISION FAIL" << std::endl;
-                    //     };
-
-                    //     // for(size_t j= 0; j < m_parentLink_p->m_collisionModelOptimal_sp->num_vertices; j++) {
-                    //     // m_collisionModelOptimal_sp->addTriangle(vertices[0], vertices[1], vertices[2]);
-                    //     // }
-                    //     m_collisionModelOptimal_sp->endModel();
-                    //     m_collisionModelOptimal_sp->computeLocalAABB();
-                    //     m_parentLink_p->m_collisionModelOptimal_sp= m_collisionModelOptimal_sp;
-                    //     m_collisionModelOptimal_sp = nullptr;
-                    // } else if(m_hasCollision) {
-                    //     std::cout << "OPTIMAL = NON-OPTIMAL" << std::endl;
-                    //     m_collisionModelOptimal_sp= std::shared_ptr<fcl::BVHModel<fcl::OBB<T>>>(
-                    //         new fcl::BVHModel<fcl::OBB<T>>(*(m_collisionModel_sp)));
-                    //     std::cout << m_collisionModelOptimal_sp->num_vertices << std::endl;
-                    // }
-                    // m_collisionObjectOptimal_sp.reset(new fcl::CollisionObject<T>(m_collisionModelOptimal_sp));
-                    // }
+                    } 
                 }
             }
-#if !ARDL_EXTERNAL_DATA
             Link(urdf::LinkConstSharedPtr link): Link(link, nullptr, nullptr){};
-#else
-            Link(urdf::LinkConstSharedPtr link, ARDL::Data<T> &data, size_t i): Link(link, false, -1, -1, data, i){};
-#endif
 
             ~Link() {}
 
@@ -383,30 +268,14 @@ namespace ARDL {
                 }
             }
 
-#if !ARDL_EXTERNAL_DATA
             void loadChildJoint(std::string childName, aligned_vector<JointVariant<T>> &joints_all_vsp)
-#else
-            void loadChildJoint(std::string childName, ARDL::Data<T> &data, size_t i)
-#endif
             {
                 for(urdf::JointSharedPtr joint: urdfModel->child_joints) {
                     if(joint->child_link_name == childName) {
                         switch(joint->type) {
-#if !ARDL_EXTERNAL_DATA
                         case urdf::Joint::REVOLUTE: joints_all_vsp.emplace_back(RevoluteJoint<T>(joint, *this)); break;
-                        case urdf::Joint::PRISMATIC: throw std::runtime_error("PRISMATIC JOINT NOT IMPLEMENTED"); break;
+                        case urdf::Joint::PRISMATIC: joints_all_vsp.emplace_back(PrismaticJoint<T>(joint, *this));break;
                         case urdf::Joint::FIXED: joints_all_vsp.emplace_back(FixedJoint<T>(joint, *this)); break;
-#else
-                        case urdf::Joint::REVOLUTE:
-                            data.addJoint(false, RevoluteJoint<T>::getDof());
-                            data.joints_all.emplace_back(RevoluteJoint<T>(joint, *this, data, i));
-                            break;
-                        case urdf::Joint::PRISMATIC: throw std::runtime_error("PRISMATIC JOINT NOT IMPLEMENTED"); break;
-                        case urdf::Joint::FIXED:
-                            data.addJoint(true, FixedJoint<T>::getDof());
-                            data.joints_all.emplace_back(FixedJoint<T>(joint, *this, data, i));
-                            break;
-#endif
                         default: throw std::runtime_error("DEFAULT JOINT NOT IMPLEMENTED"); break;
                         }
                         break;

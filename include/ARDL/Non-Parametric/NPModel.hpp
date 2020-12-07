@@ -10,7 +10,7 @@ namespace ARDL {
              public:
             EIGEN_MAKE_ALIGNED_OPERATOR_NEW
             ARDL_DERIVED(NPModel<T>)
-#if ARDL_VARIANT == ON
+#if ARDL_VARIANT
             template<typename... Args, typename D2>
             void compute(Args... input, const D2 &output) {
                 derived().compute(input..., output);
